@@ -1,0 +1,25 @@
+@import "tailwindcss";
+
+@theme {
+  --color-receipt-bg: #0a0a0a;
+  --color-receipt-fg: #e5e5e5;
+  --color-receipt-muted: #6b6b6b;
+  --color-receipt-accent: #d4d4d4;
+  --color-receipt-border: #1f1f1f;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
+}
+
+html,
+body {
+  background: transparent;
+  color: var(--color-receipt-fg);
+  font-family:
+    ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "SF Pro", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Make window background transparent so widget can show through. */
+html {
+  background: transparent;
+}

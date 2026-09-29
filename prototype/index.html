@@ -1,0 +1,1631 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Receipts — prototype (galley proof)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <style type="text/tailwindcss">
+    @theme {
+      /* ink — proofing black */
+      --color-ink: #0c0a07;
+      --color-ink-2: #3d3a35;
+      --color-ink-3: #5e5749;
+      /* paper — proof paper, warmer than v8 cream */
+      --color-paper: #f3eee2;
+      --color-paper-2: #ebe5d3;
+      --color-paper-3: #ddd5c0;
+      --color-rule: #b8ad94;
+      /* accent — proofing red, replaces v8 burnt sienna */
+      --color-accent: #c8201a;
+      --color-accent-2: #8a1410;
+      --color-accent-soft: #4a0a08;
+      /* semantic */
+      --color-positive: #1a5a35;
+      --color-destructive: #9a1810;
+      /* type */
+      --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+      --font-display: "Fraunces", "Source Serif 4", Georgia, serif;
+    }
+  </style>
+  <style>
+    html, body {
+      background: var(--color-paper);
+      background-image: radial-gradient(circle, rgba(60, 50, 30, 0.05) 1px, transparent 1.5px);
+      background-size: 14px 14px;
+      color: var(--color-ink);
+      font-family: var(--font-sans);
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+
+    /* numeric & type utilities */
+    .tabular { font-variant-numeric: tabular-nums; }
+    .display {
+      font-family: var(--font-display);
+      font-feature-settings: "ss01", "ss02", "tnum", "lnum";
+      font-variation-settings: "opsz" 144;
+    }
+    .mono { font-family: var(--font-mono); }
+    h1, h2, h3 { text-wrap: balance; margin: 0; }
+    h1 { font-size: 68px; line-height: 0.92; letter-spacing: -0.035em; font-weight: 400; }
+    h2 { font-size: 30px; line-height: 1; letter-spacing: -0.03em; font-weight: 400; }
+    h3 { font-size: 18px; line-height: 1.3; letter-spacing: -0.015em; font-weight: 600; }
+    ::selection { background: var(--color-accent); color: var(--color-paper); }
+
+    /* perforation — alternating dots and dashes, like real tear paper */
+    .perf {
+      height: 5px;
+      background-image:
+        radial-gradient(circle at 2px 50%, var(--color-rule) 0.9px, transparent 1.3px),
+        linear-gradient(90deg, var(--color-rule) 1.4px, transparent 1.4px);
+      background-size: 8px 5px, 8px 5px;
+      background-position: 0 50%, 4px 50%;
+      background-repeat: repeat-x;
+    }
+
+    /* rec dot pulse */
+    @keyframes pulse-rec {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.3; transform: scale(0.7); }
+    }
+    .pulse-rec { animation: pulse-rec 1.4s ease-in-out infinite; transform-origin: center; }
+    @media (prefers-reduced-motion: reduce) {
+      .pulse-rec { animation: none; }
+    }
+
+    /* popup open/close */
+    #popup, #popup-bg-close { transition: opacity 180ms ease, transform 220ms cubic-bezier(0.32, 0.72, 0.36, 1); }
+    #popup.hidden { opacity: 0; transform: translateY(-6px) scale(0.98); pointer-events: none; }
+    #popup-bg-close { display: none; }
+    #popup-bg-close.active { display: block; }
+
+    /* registration crosshair */
+    .crosshair {
+      width: 10px;
+      height: 10px;
+      position: relative;
+      display: inline-block;
+      flex-shrink: 0;
+    }
+    .crosshair::before,
+    .crosshair::after {
+      content: '';
+      position: absolute;
+      background: currentColor;
+    }
+    .crosshair::before { top: 50%; left: 0; right: 0; height: 1px; margin-top: -0.5px; }
+    .crosshair::after { left: 50%; top: 0; bottom: 0; width: 1px; margin-left: -0.5px; }
+
+    /* color bar (CMYK-ish decorative) */
+    .color-bar { display: flex; height: 3px; width: 100%; }
+    .color-bar > span { flex: 1; }
+
+    /* button feedback */
+    button, input { -webkit-tap-highlight-color: transparent; }
+    button {
+      transition:
+        background-color 140ms ease,
+        border-color 140ms ease,
+        color 140ms ease,
+        transform 80ms ease,
+        box-shadow 140ms ease;
+    }
+    button:not(:disabled):active { transform: translateY(0.5px); }
+    input { transition: background-color 140ms ease, border-color 140ms ease; }
+
+    /* selected tab */
+    .tab-active {
+      color: var(--color-ink);
+      background: var(--color-paper);
+      border-bottom-color: var(--color-accent);
+    }
+
+    /* row hover */
+    .row-hover:hover { background: var(--color-paper); }
+
+    /* date stamp rotation */
+    .stamp { transform: rotate(-3deg); transform-origin: center; }
+
+    /* crop marks container */
+    .crops { position: relative; }
+    .crops > .crop {
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      border-color: var(--color-ink-3);
+      border-style: solid;
+      border-width: 0;
+    }
+    .crop.tl { top: 10px; left: 10px; border-top-width: 1px; border-left-width: 1px; }
+    .crop.tr { top: 10px; right: 10px; border-top-width: 1px; border-right-width: 1px; }
+    .crop.bl { bottom: 10px; left: 10px; border-bottom-width: 1px; border-left-width: 1px; }
+    .crop.br { bottom: 10px; right: 10px; border-bottom-width: 1px; border-right-width: 1px; }
+
+    /* One shared geometry for dates, time labels, and session columns. */
+    .cal-scroll { overflow-x: auto; padding-bottom: 8px; }
+    .cal-grid { --cal-gutter: 64px; min-width: 620px; }
+    .cal-heading {
+      display: grid;
+      grid-template-columns: var(--cal-gutter) repeat(7, minmax(0, 1fr));
+      align-items: end;
+      margin-bottom: 10px;
+    }
+    .cal-zone { padding-bottom: 10px; font-size: 11px; color: var(--color-ink-3); }
+    .cal-body { position: relative; height: 384px; }
+    .cal-axis { position: absolute; inset: 0 auto 0 0; width: var(--cal-gutter); }
+    .cal-axis span {
+      position: absolute; right: 14px; font-size: 11px; line-height: 16px;
+      color: var(--color-ink-3); transform: translateY(-50%);
+    }
+    .cal-axis span:first-child { transform: none; }
+    .cal-axis span:last-child { transform: translateY(-100%); }
+    .cal-lines, .cal-days { position: absolute; inset: 0 0 0 var(--cal-gutter); }
+    .cal-lines { pointer-events: none; }
+    .cal-lines span {
+      position: absolute; left: 0; right: 0;
+      border-top: 1px solid color-mix(in srgb, var(--color-rule) 45%, transparent);
+    }
+    .cal-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); overflow: hidden; }
+    .cal-days > div { min-width: 0; border-left: 1px solid color-mix(in srgb, var(--color-rule) 35%, transparent); }
+    .cal-days > div:last-child { border-right: 1px solid color-mix(in srgb, var(--color-rule) 35%, transparent); }
+    .cal-empty { margin: 20px 0; }
+    .cal-empty p { margin: 0; }
+    .cal-empty strong { display: block; font-size: 14px; font-weight: 500; }
+    .cal-empty small { display: block; margin-top: 5px; font-size: 12px; color: var(--color-ink-3); }
+    #panel-week > div:first-child { flex-wrap: wrap; }
+    #week-range { letter-spacing: 0.05em; }
+  </style>
+</head>
+<body class="min-h-screen">
+
+  <!-- ============================================================ -->
+  <!-- MENU BAR SIMULATOR (sticky, prototype-only) -->
+  <!-- ============================================================ -->
+  <header class="sticky top-0 z-50 h-9 bg-[#1c1c1f] border-b border-[#2c2c2f] flex items-center justify-between px-4 text-[11px] font-sans select-none text-[#f5f5f5]">
+    <div class="flex items-center gap-4">
+      <span class="text-[13px] leading-none" aria-hidden="true">⌘</span>
+      <span class="font-semibold tracking-tight">receipts<span class="text-[#c8201a]">.</span></span>
+      <span class="text-[#a8a8ad] hover:text-white cursor-default transition-colors">File</span>
+      <span class="text-[#a8a8ad] hover:text-white cursor-default transition-colors">Edit</span>
+      <span class="text-[#a8a8ad] hover:text-white cursor-default transition-colors">View</span>
+    </div>
+    <div class="flex items-center gap-3">
+      <span class="text-[#6f6f74] text-[10px]">100%</span>
+      <span class="text-[#6f6f74] text-[10px] hidden sm:inline">wifi</span>
+      <button
+        id="menu-icon"
+        onclick="togglePopup(event)"
+        class="relative px-1.5 py-1 hover:bg-white/10 rounded flex items-center gap-1.5 group"
+        title="Receipts — click to open"
+        aria-label="Toggle Receipts popup"
+      >
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" class="text-[#f5f5f5]">
+          <path d="M3.5 2h9v11l-.75 1-.75-1-.75 1-.75-1-.75 1-.75-1-.75 1-.75-1-.75 1-.75-1-.75 1-.75-1z" stroke-linejoin="miter"/>
+          <path d="M6 5h4M6 7h4M6 9h3"/>
+        </svg>
+        <div
+          id="menu-rec-dot"
+          class="hidden absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-[#c8201a] pulse-rec ring-2 ring-[#1c1c1f]"
+        ></div>
+        <div
+          id="menu-time"
+          class="hidden text-[10px] font-mono tabular-nums text-[#a8a8ad] font-medium"
+        >00:00</div>
+      </button>
+      <span id="menu-clock" class="font-mono tabular-nums text-[#f5f5f5] text-[11px]">14:23</span>
+    </div>
+  </header>
+
+  <!-- ============================================================ -->
+  <!-- POPUP — primary surface, drops from menu bar icon -->
+  <!-- ============================================================ -->
+  <div id="popup-bg-close" onclick="closePopup()"></div>
+  <div
+    id="popup"
+    class="hidden fixed top-12 right-4 z-50 w-[320px] rounded-xl bg-paper-2 border border-rule overflow-hidden"
+    style="box-shadow: 0 24px 48px -16px rgba(12,10,7,0.4), 0 0 0 1px rgba(12,10,7,0.04);"
+    data-state="idle"
+  >
+    <!-- status header -->
+    <div class="flex items-center justify-between px-4 pt-3.5 pb-2">
+      <div class="flex items-center gap-2">
+        <span class="crosshair text-ink-3" aria-hidden="true"></span>
+        <div
+          id="popup-rec"
+          class="hidden w-1.5 h-1.5 rounded-full bg-accent pulse-rec"
+          aria-hidden="true"
+        ></div>
+        <span
+          id="popup-status"
+          class="mono text-[10px] uppercase tracking-[0.22em] text-ink-3 font-semibold"
+        >idle</span>
+      </div>
+      <button
+        onclick="closePopup(); document.getElementById('main-panel-anchor')?.scrollIntoView({behavior:'smooth', block:'start'});"
+        class="mono text-[10px] uppercase tracking-[0.22em] text-ink-2 hover:text-ink transition-colors"
+      >
+        open log →
+      </button>
+    </div>
+
+    <!-- note input -->
+    <div class="px-4 pb-3">
+      <input
+        id="popup-note"
+        type="text"
+        maxlength="120"
+        placeholder="what are you doing?"
+        autocomplete="off"
+        spellcheck="false"
+        aria-label="What are you working on"
+        class="w-full bg-paper border border-rule rounded-md px-3 py-2 mono text-[13px] text-ink placeholder:text-ink-3 focus:border-accent focus:bg-paper-2 focus:ring-2 focus:ring-accent/15"
+      />
+    </div>
+
+    <!-- big time + start -->
+    <div class="px-4 pb-4 flex items-baseline gap-3">
+      <div
+        id="popup-time"
+        class="display tabular text-[46px] leading-none font-medium text-ink-3 tracking-[-0.02em] min-w-0 flex-1"
+        aria-live="off"
+      >00:00:00</div>
+      <button
+        id="popup-btn"
+        disabled
+        class="rounded-lg bg-ink text-paper font-sans text-[14px] font-semibold px-4 py-2.5 hover:bg-ink-2 disabled:opacity-25 disabled:cursor-not-allowed transition-colors shrink-0"
+      >
+        Start
+      </button>
+    </div>
+
+    <!-- color bar (CMYK-style decoration) -->
+    <div class="color-bar" aria-hidden="true">
+      <span style="background: #c8201a"></span>
+      <span style="background: #1a5a35"></span>
+      <span style="background: #0c0a07"></span>
+      <span style="background: #b8ad94"></span>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- MAIN CONTENT -->
+  <!-- ============================================================ -->
+  <main class="px-10 md:px-14 lg:px-20 py-16 mx-auto max-w-[1080px] flex flex-col gap-20">
+
+    <!-- ────────── TITLE ────────── -->
+    <div class="flex flex-col gap-4 max-w-[680px]">
+      <div class="flex items-center gap-3">
+        <span class="crosshair text-ink-3" aria-hidden="true"></span>
+        <span class="mono text-[10px] uppercase tracking-[0.28em] text-ink-3 font-semibold">prototype · galley proof theme</span>
+      </div>
+      <h1 class="display text-[68px] leading-[0.92] tracking-[-0.035em] text-ink font-normal">
+        receipts<span class="text-accent">.</span>
+      </h1>
+      <p class="text-[15px] text-ink-2 leading-relaxed max-w-[560px]">
+        A menu-bar time tracker for hourly work. Click the icon at the top right of the page to open the popup. The popup and main window share the same timer state, so a session started in either surface ticks in the other.
+      </p>
+      <div class="mono text-[11px] uppercase tracking-[0.2em] text-ink-3 flex items-center gap-2 mt-2">
+        <span class="w-1 h-1 rounded-full bg-accent pulse-rec"></span>
+        click the icon above ↑
+      </div>
+    </div>
+
+    <!-- ────────── PALETTE ────────── -->
+    <section>
+      <header class="mb-4 flex items-center gap-4">
+        <span class="mono text-[10px] uppercase tracking-[0.28em] text-ink-3 font-semibold">palette</span>
+        <div class="flex-1 h-px bg-rule"></div>
+      </header>
+      <div class="bg-paper-2 border border-rule rounded-2xl p-8" style="box-shadow: 0 12px 28px -16px rgba(12,10,7,0.2);">
+        <div class="mono text-[10px] uppercase tracking-[0.28em] text-ink-3 font-semibold mb-5">color tokens</div>
+        <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+          <div>
+            <div class="h-16 rounded-md bg-ink"></div>
+            <div class="mt-2 mono text-[10px] text-ink">ink</div>
+            <div class="mono text-[10px] text-ink-3 tabular">#0c0a07</div>
+          </div>
+          <div>
+            <div class="h-16 rounded-md bg-ink-2"></div>
+            <div class="mt-2 mono text-[10px] text-ink">ink-2</div>
+            <div class="mono text-[10px] text-ink-3 tabular">#3d3a35</div>
+          </div>
+          <div>
+            <div class="h-16 rounded-md bg-ink-3"></div>
+            <div class="mt-2 mono text-[10px] text-ink">ink-3</div>
+            <div class="mono text-[10px] text-ink-3 tabular">#5e5749</div>
+          </div>
+          <div>
+            <div class="h-16 rounded-md bg-paper" style="box-shadow: inset 0 0 0 1px var(--color-rule);"></div>
+            <div class="mt-2 mono text-[10px] text-ink">paper</div>
+            <div class="mono text-[10px] text-ink-3 tabular">#f3eee2</div>
+          </div>
+          <div>
+            <div class="h-16 rounded-md bg-paper-2"></div>
+            <div class="mt-2 mono text-[10px] text-ink">paper-2</div>
+            <div class="mono text-[10px] text-ink-3 tabular">#ebe5d3</div>
+          </div>
+          <div>
+            <div class="h-16 rounded-md bg-paper-3"></div>
+            <div class="mt-2 mono text-[10px] text-ink">paper-3</div>
+            <div class="mono text-[10px] text-ink-3 tabular">#ddd5c0</div>
+          </div>
+          <div>
+            <div class="h-16 rounded-md bg-rule"></div>
+            <div class="mt-2 mono text-[10px] text-ink">rule</div>
+            <div class="mono text-[10px] text-ink-3 tabular">#b8ad94</div>
+          </div>
+          <div>
+            <div class="h-16 rounded-md bg-accent"></div>
+            <div class="mt-2 mono text-[10px] text-ink">accent</div>
+            <div class="mono text-[10px] text-ink-3 tabular">#c8201a</div>
+          </div>
+          <div>
+            <div class="h-16 rounded-md bg-accent-2"></div>
+            <div class="mt-2 mono text-[10px] text-ink">accent-2</div>
+            <div class="mono text-[10px] text-ink-3 tabular">#8a1410</div>
+          </div>
+          <div>
+            <div class="h-16 rounded-md bg-positive"></div>
+            <div class="mt-2 mono text-[10px] text-ink">positive</div>
+            <div class="mono text-[10px] text-ink-3 tabular">#1a5a35</div>
+          </div>
+          <div>
+            <div class="h-16 rounded-md bg-destructive"></div>
+            <div class="mt-2 mono text-[10px] text-ink">destructive</div>
+            <div class="mono text-[10px] text-ink-3 tabular">#9a1810</div>
+          </div>
+        </div>
+
+        <!-- semantic usage -->
+        <div class="mt-10">
+          <div class="mono text-[10px] uppercase tracking-[0.28em] text-ink-3 font-semibold mb-4">semantic usage</div>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
+            <div class="border-l-2 border-accent pl-5 py-1">
+              <div class="mono text-[9px] uppercase tracking-[0.22em] text-accent font-semibold mb-2">accent · recording</div>
+              <div class="display tabular text-[36px] text-ink leading-none tracking-[-0.02em]">04:12</div>
+              <div class="mono text-[10px] text-ink-3 mt-2">live elapsed · only here</div>
+            </div>
+            <div class="border-l-2 border-positive pl-5 py-1">
+              <div class="mono text-[9px] uppercase tracking-[0.22em] text-positive font-semibold mb-2">positive · saved</div>
+              <div class="display tabular text-[36px] text-ink leading-none tracking-[-0.02em]">5h 12m</div>
+              <div class="mono text-[10px] text-ink-3 mt-2">past totals, completed sessions</div>
+            </div>
+            <div class="border-l-2 border-destructive pl-5 py-1">
+              <div class="mono text-[9px] uppercase tracking-[0.22em] text-destructive font-semibold mb-2">destructive · overflow</div>
+              <div class="display tabular text-[36px] text-ink leading-none tracking-[-0.02em]">12h 04m</div>
+              <div class="mono text-[10px] text-ink-3 mt-2">warnings, deletions</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- control buttons -->
+        <div class="mt-10">
+          <div class="mono text-[10px] uppercase tracking-[0.28em] text-ink-3 font-semibold mb-4">controls</div>
+          <div class="flex flex-wrap items-center gap-3">
+            <button class="rounded-lg bg-ink text-paper font-semibold text-[14px] px-4 py-2.5 hover:bg-ink-2 transition-colors">Start</button>
+            <button class="rounded-lg bg-accent text-paper font-semibold text-[14px] px-4 py-2.5 hover:bg-accent-2 transition-colors">Stop</button>
+            <button class="rounded-lg bg-positive/12 text-positive border border-positive/40 font-semibold text-[14px] px-4 py-2.5 hover:bg-positive/20 transition-colors">✓ Saved</button>
+            <button class="rounded-lg text-destructive font-semibold text-[14px] px-4 py-2.5 hover:bg-destructive/10 transition-colors">Delete</button>
+            <button disabled class="rounded-lg bg-ink text-paper font-semibold text-[14px] px-4 py-2.5 opacity-25 cursor-not-allowed">Start</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ────────── TYPE ────────── -->
+    <section>
+      <header class="mb-4 flex items-center gap-4">
+        <span class="mono text-[10px] uppercase tracking-[0.28em] text-ink-3 font-semibold">type · three roles</span>
+        <div class="flex-1 h-px bg-rule"></div>
+      </header>
+      <div class="bg-paper-2 border border-rule rounded-2xl p-8 grid grid-cols-1 md:grid-cols-3 gap-10" style="box-shadow: 0 12px 28px -16px rgba(12,10,7,0.2);">
+        <div>
+          <div class="flex items-center gap-2 mb-3">
+            <span class="mono text-[10px] uppercase tracking-[0.22em] text-ink-3 font-semibold">display</span>
+            <span class="mono text-[10px] text-ink-3">·</span>
+            <span class="mono text-[10px] text-ink-2">Fraunces</span>
+          </div>
+          <div class="display text-[72px] leading-[0.9] tracking-[-0.035em] text-ink">04:12</div>
+          <div class="display text-[18px] leading-snug text-ink-2 mt-5 italic max-w-[180px]">a proof of work, set in type</div>
+          <div class="mono text-[10px] text-ink-3 mt-5">weights · 400 500 600 700</div>
+        </div>
+        <div>
+          <div class="flex items-center gap-2 mb-3">
+            <span class="mono text-[10px] uppercase tracking-[0.22em] text-ink-3 font-semibold">sans</span>
+            <span class="mono text-[10px] text-ink-3">·</span>
+            <span class="mono text-[10px] text-ink-2">Inter</span>
+          </div>
+          <div class="text-[48px] leading-none tracking-[-0.025em] text-ink font-semibold">Aa Bb</div>
+          <div class="text-[16px] leading-snug text-ink-2 mt-5 max-w-[200px]">Type labels, session notes, and button text. Clean and neutral.</div>
+          <div class="mono text-[10px] text-ink-3 mt-5">weights · 400 500 600 700</div>
+        </div>
+        <div>
+          <div class="flex items-center gap-2 mb-3">
+            <span class="mono text-[10px] uppercase tracking-[0.22em] text-ink-3 font-semibold">mono</span>
+            <span class="mono text-[10px] text-ink-3">·</span>
+            <span class="mono text-[10px] text-ink-2">JetBrains Mono</span>
+          </div>
+          <div class="mono text-[34px] leading-none tabular text-ink">14:23:08</div>
+          <div class="mono text-[12px] leading-snug text-ink-2 mt-5 max-w-[200px]">timestamps · ids · stat readouts · all uppercase labels</div>
+          <div class="mono text-[10px] text-ink-3 mt-5">weights · 400 500 700</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ────────── POPUP (static reference render) ────────── -->
+    <section>
+      <header class="mb-4 flex items-center gap-4">
+        <span class="mono text-[10px] uppercase tracking-[0.28em] text-ink-3 font-semibold">popup · primary surface</span>
+        <div class="flex-1 h-px bg-rule"></div>
+      </header>
+      <div class="grid grid-cols-1 lg:grid-cols-[1fr_240px] gap-10 items-start">
+        <div class="flex flex-col gap-5">
+          <p class="text-[14px] text-ink-2 leading-relaxed max-w-[420px]">
+            320 px wide. Drops from the menu-bar icon on click. One screen, no tabs. All controls visible: status, note, time, start / stop.
+          </p>
+          <div
+            class="w-[320px] rounded-xl bg-paper-2 border border-rule overflow-hidden"
+            style="box-shadow: 0 24px 48px -16px rgba(12,10,7,0.4), 0 0 0 1px rgba(12,10,7,0.04);"
+          >
+            <div class="flex items-center justify-between px-4 pt-3.5 pb-2">
+              <div class="flex items-center gap-2">
+                <span class="crosshair text-ink-3" aria-hidden="true"></span>
+                <span class="w-1.5 h-1.5 rounded-full bg-accent pulse-rec" aria-hidden="true"></span>
+                <span class="mono text-[10px] uppercase tracking-[0.22em] text-accent font-semibold">rec</span>
+              </div>
+              <span class="mono text-[10px] uppercase tracking-[0.22em] text-ink-2">open log →</span>
+            </div>
+            <div class="px-4 pb-3">
+              <div class="w-full border border-accent px-3 py-2 mono text-[13px] text-ink">pairing on the new onboarding flow</div>
+            </div>
+            <div class="px-4 pb-4 flex items-baseline gap-3">
+              <div class="display tabular text-[46px] leading-none font-medium text-ink tracking-[-0.02em] flex-1">01:24:08</div>
+              <button class="rounded-lg bg-accent text-paper font-sans text-[14px] font-semibold px-4 py-2.5 transition-colors shrink-0">Stop</button>
+            </div>
+            <div class="color-bar" aria-hidden="true">
+              <span style="background: #c8201a"></span>
+              <span style="background: #1a5a35"></span>
+              <span style="background: #0c0a07"></span>
+              <span style="background: #b8ad94"></span>
+            </div>
+          </div>
+        </div>
+        <aside class="hidden lg:flex flex-col gap-6">
+          <div>
+            <div class="mono text-[10px] uppercase tracking-[0.28em] text-ink-3 font-semibold mb-3">dimensions</div>
+            <div class="space-y-1.5 mono text-[11px] text-ink-2 tabular">
+              <div class="flex justify-between gap-3"><span class="text-ink-3">width</span><span>320 px</span></div>
+              <div class="flex justify-between gap-3"><span class="text-ink-3">radius</span><span>12 px</span></div>
+              <div class="flex justify-between gap-3"><span class="text-ink-3">border</span><span>1 px rule</span></div>
+              <div class="flex justify-between gap-3"><span class="text-ink-3">shadow</span><span>0 24 48 / 40%</span></div>
+            </div>
+          </div>
+          <div>
+            <div class="mono text-[10px] uppercase tracking-[0.28em] text-ink-3 font-semibold mb-3">behavior</div>
+            <div class="space-y-2 text-[12px] text-ink-2 leading-relaxed">
+              <p>Click outside to dismiss. <span class="mono text-[11px]">esc</span> also closes.</p>
+              <p>Live timer ticks in the menu bar while popup is closed.</p>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ────────── MAIN PANEL (dynamic, shared state) ────────── -->
+    <section>
+      <header class="mb-4 flex items-center gap-4">
+        <span class="mono text-[10px] uppercase tracking-[0.28em] text-ink-3 font-semibold">main panel · log + stats</span>
+        <div class="flex-1 h-px bg-rule"></div>
+      </header>
+      <div id="main-panel-anchor" class="crops w-[760px] max-w-full rounded-2xl bg-paper-2 border border-rule overflow-hidden" style="box-shadow: 0 24px 48px -16px rgba(12,10,7,0.4), 0 0 0 1px rgba(12,10,7,0.04);">
+        <span class="crop tl"></span><span class="crop tr"></span><span class="crop bl"></span><span class="crop br"></span>
+
+        <!-- header -->
+        <div class="p-7 pb-5">
+          <div class="flex items-baseline justify-between mb-3 gap-4">
+            <h2 class="display text-[30px] tracking-[-0.03em] text-ink font-normal leading-none">
+              receipts<span class="text-accent">.</span>
+            </h2>
+            <div class="stamp mono text-[10px] uppercase tracking-[0.22em] text-ink-2 border border-ink-3 px-2 py-1 bg-paper-2 inline-block whitespace-nowrap">
+              <span id="main-date">· · ·</span>
+            </div>
+          </div>
+          <div class="mono text-[11px] tracking-[0.15em] uppercase text-ink-3 flex items-center gap-3 flex-wrap">
+            <span>today <span id="main-today" class="text-ink font-semibold ml-1 tabular">00:00</span></span>
+            <span class="text-ink-3">·</span>
+            <span>week <span id="main-week" class="text-ink font-semibold ml-1 tabular">00:00</span></span>
+            <span class="text-ink-3">·</span>
+            <span><span id="main-sessions" class="text-ink font-semibold tabular">0</span> sessions</span>
+          </div>
+        </div>
+
+        <div class="perf mx-7"></div>
+
+        <!-- timer strip -->
+        <div class="px-7 py-4 flex items-center gap-3 border-b border-rule">
+          <div id="main-rec" class="hidden w-1.5 h-1.5 rounded-full bg-accent pulse-rec shrink-0"></div>
+          <div
+            id="main-time"
+            class="display tabular text-[42px] leading-none font-medium text-ink-3 tracking-[-0.02em] min-w-0 flex-1"
+            style="font-variation-settings: 'opsz' 144;"
+          >00:00:00</div>
+          <input
+            id="main-note"
+            type="text"
+            maxlength="120"
+            placeholder="what are you doing?"
+            autocomplete="off"
+            spellcheck="false"
+            aria-label="What are you working on"
+            class="flex-1 min-w-0 bg-paper border border-rule rounded-md px-3 py-2 mono text-[13px] text-ink placeholder:text-ink-3 focus:border-accent focus:bg-paper-2 focus:ring-2 focus:ring-accent/15"
+          />
+          <button
+            id="main-btn"
+            class="rounded-lg bg-ink text-paper font-sans text-[14px] font-semibold px-4 py-2.5 hover:bg-ink-2 disabled:opacity-25 disabled:cursor-not-allowed transition-colors shrink-0"
+          >
+            Start
+          </button>
+        </div>
+
+        <div class="perf mx-7"></div>
+
+        <!-- tabs -->
+        <nav class="px-7 pt-5 flex gap-1" role="tablist" aria-label="Sessions">
+          <button
+            id="tab-log"
+            role="tab"
+            aria-selected="true"
+            data-tab="log"
+            onclick="setTab('log')"
+            class="mono text-[11px] uppercase tracking-[0.18em] font-semibold px-3.5 py-2 border-b-2 tab-active transition-colors"
+          >
+            log
+          </button>
+          <button
+            id="tab-week"
+            role="tab"
+            aria-selected="false"
+            data-tab="week"
+            onclick="setTab('week')"
+            class="mono text-[11px] uppercase tracking-[0.18em] font-semibold px-3.5 py-2 border-b-2 border-transparent text-ink-3 hover:text-ink-2 transition-colors"
+          >
+            week
+          </button>
+          <button
+            id="tab-stats"
+            role="tab"
+            aria-selected="false"
+            data-tab="stats"
+            onclick="setTab('stats')"
+            class="mono text-[11px] uppercase tracking-[0.18em] font-semibold px-3.5 py-2 border-b-2 border-transparent text-ink-3 hover:text-ink-2 transition-colors"
+          >
+            stats
+          </button>
+        </nav>
+
+        <!-- tab content -->
+        <div class="px-7 pt-2 pb-7">
+          <!-- LOG PANEL -->
+          <div id="panel-log">
+            <div class="grid grid-cols-[64px_72px_1fr_56px] gap-3 py-2.5 mono text-[10px] uppercase tracking-[0.22em] text-ink-3 font-semibold border-b border-rule">
+              <span>time</span>
+              <span class="text-right">duration</span>
+              <span>note</span>
+              <span class="text-right">id</span>
+            </div>
+            <div id="log-rows" class="divide-y divide-dashed divide-rule"></div>
+          </div>
+
+          <!-- WEEK PANEL — calendar grid -->
+          <div id="panel-week" class="hidden">
+            <div class="mt-4 mb-3 flex items-baseline gap-3">
+              <div class="mono text-[10px] uppercase tracking-[0.22em] text-ink-3 font-semibold">this week · 08:00–20:00</div>
+              <div class="flex-1 h-px bg-rule"></div>
+              <div class="mono text-[10px] uppercase tracking-[0.22em] text-ink-3 tabular" id="week-range">— —</div>
+            </div>
+
+            <div id="cal-empty" class="cal-empty" hidden><p><strong>No sessions this week</strong><small>Start a timer to see your time here.</small></p></div>
+            <div class="cal-scroll" tabindex="0" role="region" aria-label="Weekly calendar, scroll horizontally on small screens">
+              <div class="cal-grid">
+                <div class="cal-heading">
+                  <div class="cal-zone mono">Local</div>
+                  <div id="cal-header" class="contents"></div>
+                </div>
+                <div class="cal-body">
+                  <div class="cal-axis mono tabular" aria-label="Time of day"></div>
+                  <div class="cal-lines" aria-hidden="true"></div>
+                  <div id="cal-days" class="cal-days"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- legend -->
+            <div class="mt-4 flex items-center gap-5 mono text-[10px] uppercase tracking-[0.18em] text-ink-3">
+              <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 bg-ink rounded-sm"></span><span>logged</span></div>
+              <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 bg-accent rounded-sm"></span><span>recording</span></div>
+              <div class="flex items-center gap-2"><span class="w-2.5 h-px bg-accent"></span><span>now</span></div>
+            </div>
+          </div>
+
+          <!-- STATS PANEL -->
+          <div id="panel-stats" class="hidden">
+            <div class="grid grid-cols-2 gap-8 mt-6">
+              <div class="py-1">
+                <div class="mono text-[10px] uppercase tracking-[0.22em] text-accent font-semibold mb-2">today</div>
+                <div id="stats-today" class="display tabular text-[52px] text-ink leading-none tracking-[-0.025em]" style="font-variation-settings: 'opsz' 144;">00:00</div>
+                <div id="stats-today-count" class="mono text-[11px] text-ink-2 mt-3 tabular">0 sessions</div>
+              </div>
+              <div class="py-1">
+                <div class="mono text-[10px] uppercase tracking-[0.22em] text-ink-3 font-semibold mb-2">last 7 days</div>
+                <div id="stats-week" class="display tabular text-[52px] text-ink leading-none tracking-[-0.025em]" style="font-variation-settings: 'opsz' 144;">00:00</div>
+                <div id="stats-week-count" class="mono text-[11px] text-ink-2 mt-3 tabular">0 sessions</div>
+              </div>
+            </div>
+            <div class="mt-8 py-1">
+              <div class="mono text-[10px] uppercase tracking-[0.22em] text-ink-3 font-semibold mb-4">daily · last 7 days (hours)</div>
+              <div id="chart-bars" class="border-t border-dashed border-rule pt-3 h-36 flex items-end gap-2 px-1"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ────────── EMPTY LOG ────────── -->
+    <section>
+      <header class="mb-4 flex items-center gap-4">
+        <span class="mono text-[10px] uppercase tracking-[0.28em] text-ink-3 font-semibold">empty · no sessions</span>
+        <div class="flex-1 h-px bg-rule"></div>
+      </header>
+      <div class="crops w-[760px] max-w-full rounded-2xl bg-paper-2 border border-rule overflow-hidden" style="box-shadow: 0 24px 48px -16px rgba(12,10,7,0.4), 0 0 0 1px rgba(12,10,7,0.04);">
+        <span class="crop tl"></span><span class="crop tr"></span><span class="crop bl"></span><span class="crop br"></span>
+        <div class="p-7 pb-5">
+          <div class="flex items-baseline justify-between mb-3 gap-4">
+            <h2 class="display text-[30px] tracking-[-0.03em] text-ink font-normal leading-none">receipts<span class="text-accent">.</span></h2>
+            <div class="stamp mono text-[10px] uppercase tracking-[0.22em] text-ink-2 border border-ink-3 px-2 py-1 bg-paper-2 inline-block whitespace-nowrap">· · ·</div>
+          </div>
+          <div class="mono text-[11px] tracking-[0.15em] uppercase text-ink-3 flex items-center gap-3">
+            <span>today <span class="text-ink font-semibold ml-1 tabular">00:00</span></span>
+            <span class="text-ink-3">·</span>
+            <span>week <span class="text-ink font-semibold ml-1 tabular">00:00</span></span>
+          </div>
+        </div>
+        <div class="perf mx-7"></div>
+        <nav class="px-7 pt-5 flex gap-1">
+          <button class="mono text-[11px] uppercase tracking-[0.18em] font-semibold px-3.5 py-2 border-b-2 tab-active">log</button>
+          <button class="mono text-[11px] uppercase tracking-[0.18em] font-semibold px-3.5 py-2 border-b-2 border-transparent text-ink-3">week</button>
+          <button class="mono text-[11px] uppercase tracking-[0.18em] font-semibold px-3.5 py-2 border-b-2 border-transparent text-ink-3">stats</button>
+        </nav>
+        <div class="px-7 py-20 flex flex-col items-center justify-center text-center">
+          <span class="crosshair text-ink-3 mb-5" aria-hidden="true"></span>
+          <div class="mono text-[11px] uppercase tracking-[0.28em] text-ink-3 mb-2 font-semibold">no sessions yet</div>
+          <p class="text-[13px] text-ink-2 max-w-[320px] leading-relaxed">
+            Start a timer from the popup or main panel. Your first session will land here.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ────────── EMPTY STATS ────────── -->
+    <section>
+      <header class="mb-4 flex items-center gap-4">
+        <span class="mono text-[10px] uppercase tracking-[0.28em] text-ink-3 font-semibold">empty · zero data chart</span>
+        <div class="flex-1 h-px bg-rule"></div>
+      </header>
+      <div class="crops w-[760px] max-w-full rounded-2xl bg-paper-2 border border-rule overflow-hidden" style="box-shadow: 0 24px 48px -16px rgba(12,10,7,0.4), 0 0 0 1px rgba(12,10,7,0.04);">
+        <span class="crop tl"></span><span class="crop tr"></span><span class="crop bl"></span><span class="crop br"></span>
+        <div class="p-7 pb-5">
+          <div class="flex items-baseline justify-between mb-3 gap-4">
+            <h2 class="display text-[30px] tracking-[-0.03em] text-ink font-normal leading-none">receipts<span class="text-accent">.</span></h2>
+            <div class="stamp mono text-[10px] uppercase tracking-[0.22em] text-ink-2 border border-ink-3 px-2 py-1 bg-paper-2 inline-block whitespace-nowrap">· · ·</div>
+          </div>
+        </div>
+        <div class="perf mx-7"></div>
+        <nav class="px-7 pt-5 flex gap-1">
+          <button class="mono text-[11px] uppercase tracking-[0.18em] font-semibold px-3.5 py-2 border-b-2 border-transparent text-ink-3">log</button>
+          <button class="mono text-[11px] uppercase tracking-[0.18em] font-semibold px-3.5 py-2 border-b-2 border-transparent text-ink-3">week</button>
+          <button class="mono text-[11px] uppercase tracking-[0.18em] font-semibold px-3.5 py-2 border-b-2 tab-active">stats</button>
+        </nav>
+        <div class="px-7 pt-2 pb-7">
+          <div class="grid grid-cols-2 gap-8 mt-6">
+            <div class="py-1">
+              <div class="mono text-[10px] uppercase tracking-[0.22em] text-accent font-semibold mb-2">today</div>
+              <div class="display tabular text-[52px] text-ink leading-none tracking-[-0.025em]" style="font-variation-settings: 'opsz' 144;">00:00</div>
+              <div class="mono text-[11px] text-ink-2 mt-3 tabular">0 sessions</div>
+            </div>
+            <div class="py-1">
+              <div class="mono text-[10px] uppercase tracking-[0.22em] text-ink-3 font-semibold mb-2">last 7 days</div>
+              <div class="display tabular text-[52px] text-ink leading-none tracking-[-0.025em]" style="font-variation-settings: 'opsz' 144;">00:00</div>
+              <div class="mono text-[11px] text-ink-2 mt-3 tabular">0 sessions</div>
+            </div>
+          </div>
+          <div class="mt-8 py-1">
+            <div class="mono text-[10px] uppercase tracking-[0.22em] text-ink-3 font-semibold mb-4">daily · last 7 days (hours)</div>
+            <div class="h-36 flex items-center justify-center">
+              <span class="mono text-[10px] uppercase tracking-[0.28em] text-ink-3">no data · last 7 days</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ────────── EMPTY WEEK (calendar) ────────── -->
+    <section>
+      <header class="mb-4 flex items-center gap-4">
+        <span class="mono text-[10px] uppercase tracking-[0.28em] text-ink-3 font-semibold">empty · zero week</span>
+        <div class="flex-1 h-px bg-rule"></div>
+      </header>
+      <div class="crops w-[760px] max-w-full rounded-2xl bg-paper-2 border border-rule overflow-hidden" style="box-shadow: 0 24px 48px -16px rgba(12,10,7,0.4), 0 0 0 1px rgba(12,10,7,0.04);">
+        <span class="crop tl"></span><span class="crop tr"></span><span class="crop bl"></span><span class="crop br"></span>
+        <div class="p-7 pb-5">
+          <div class="flex items-baseline justify-between mb-3 gap-4">
+            <h2 class="display text-[30px] tracking-[-0.03em] text-ink font-normal leading-none">receipts<span class="text-accent">.</span></h2>
+            <div class="stamp mono text-[10px] uppercase tracking-[0.22em] text-ink-2 border border-ink-3 px-2 py-1 bg-paper-2 inline-block whitespace-nowrap">· · ·</div>
+          </div>
+        </div>
+        <div class="perf mx-7"></div>
+        <nav class="px-7 pt-5 flex gap-1">
+          <button class="mono text-[11px] uppercase tracking-[0.18em] font-semibold px-3.5 py-2 border-b-2 border-transparent text-ink-3">log</button>
+          <button class="mono text-[11px] uppercase tracking-[0.18em] font-semibold px-3.5 py-2 border-b-2 tab-active">week</button>
+          <button class="mono text-[11px] uppercase tracking-[0.18em] font-semibold px-3.5 py-2 border-b-2 border-transparent text-ink-3">stats</button>
+        </nav>
+        <div class="px-7 pt-3 pb-7">
+          <div class="mt-3 mb-3 flex items-baseline gap-3">
+            <div class="mono text-[10px] uppercase tracking-[0.22em] text-ink-3 font-semibold">this week · 08:00–20:00</div>
+            <div class="flex-1 h-px bg-rule"></div>
+          </div>
+          <div class="cal-empty"><p><strong>No sessions this week</strong><small>Start a timer to see your time here.</small></p></div>
+          <div class="cal-scroll" tabindex="0" role="region" aria-label="Empty weekly calendar, scroll horizontally on small screens">
+            <div class="cal-grid">
+              <div class="cal-heading">
+                <div class="cal-zone mono">Local</div>
+                <div id="empty-cal-header" class="contents"></div>
+              </div>
+              <div class="cal-body">
+                <div class="cal-axis mono tabular" aria-label="Time of day"></div>
+                <div class="cal-lines" aria-hidden="true"></div>
+                <div id="empty-cal-days" class="cal-days"></div>
+              </div>
+            </div>
+          </div>
+          <div class="mt-4 flex items-center gap-5 mono text-[10px] uppercase tracking-[0.18em] text-ink-3">
+            <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 bg-ink rounded-sm"></span><span>logged</span></div>
+            <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 bg-accent rounded-sm"></span><span>recording</span></div>
+            <div class="flex items-center gap-2"><span class="w-2.5 h-px bg-accent"></span><span>now</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ────────── COMPONENT ANATOMY ────────── -->
+    <section>
+      <header class="mb-4 flex items-center gap-4">
+        <span class="mono text-[10px] uppercase tracking-[0.28em] text-ink-3 font-semibold">components · states</span>
+        <div class="flex-1 h-px bg-rule"></div>
+      </header>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+        <!-- button states -->
+        <div class="bg-paper-2 border border-rule rounded-2xl p-6" style="box-shadow: 0 12px 28px -16px rgba(12,10,7,0.2);">
+          <div class="mono text-[10px] uppercase tracking-[0.28em] text-ink-3 font-semibold mb-5">button · states</div>
+          <div class="space-y-3">
+            <div class="flex items-center justify-between gap-3">
+              <button class="rounded-lg bg-ink text-paper font-semibold text-[14px] px-4 py-2.5">Start</button>
+              <span class="mono text-[10px] text-ink-3 uppercase tracking-[0.2em]">default</span>
+            </div>
+            <div class="flex items-center justify-between gap-3">
+              <button class="rounded-lg bg-ink-2 text-paper font-semibold text-[14px] px-4 py-2.5">Start</button>
+              <span class="mono text-[10px] text-ink-3 uppercase tracking-[0.2em]">hover</span>
+            </div>
+            <div class="flex items-center justify-between gap-3">
+              <button class="rounded-lg bg-accent text-paper font-semibold text-[14px] px-4 py-2.5">Stop</button>
+              <span class="mono text-[10px] text-ink-3 uppercase tracking-[0.2em]">recording</span>
+            </div>
+            <div class="flex items-center justify-between gap-3">
+              <button disabled class="rounded-lg bg-ink text-paper font-semibold text-[14px] px-4 py-2.5 opacity-25 cursor-not-allowed">Start</button>
+              <span class="mono text-[10px] text-ink-3 uppercase tracking-[0.2em]">disabled · no note</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- input states -->
+        <div class="bg-paper-2 border border-rule rounded-2xl p-6" style="box-shadow: 0 12px 28px -16px rgba(12,10,7,0.2);">
+          <div class="mono text-[10px] uppercase tracking-[0.28em] text-ink-3 font-semibold mb-5">input · states</div>
+          <div class="space-y-3">
+            <div>
+              <input placeholder="what are you doing?" class="w-full bg-paper border border-rule rounded-md px-3 py-2 mono text-[13px] text-ink-3" />
+              <div class="mono text-[10px] text-ink-3 uppercase tracking-[0.2em] mt-1.5">default · empty</div>
+            </div>
+            <div>
+              <input value="pairing on the new onboarding flow" class="w-full bg-paper-2 border border-accent rounded-md px-3 py-2 mono text-[13px] text-ink ring-2 ring-accent/15" />
+              <div class="mono text-[10px] text-ink-3 uppercase tracking-[0.2em] mt-1.5">focus · active</div>
+            </div>
+            <div>
+              <input value="stale session from yesterday" class="w-full bg-paper border border-rule rounded-md px-3 py-2 mono text-[13px] text-ink" />
+              <div class="mono text-[10px] text-ink-3 uppercase tracking-[0.2em] mt-1.5">filled · ready</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- session row -->
+        <div class="bg-paper-2 border border-rule rounded-2xl p-6" style="box-shadow: 0 12px 28px -16px rgba(12,10,7,0.2);">
+          <div class="mono text-[10px] uppercase tracking-[0.28em] text-ink-3 font-semibold mb-5">session row · anatomy</div>
+          <div class="px-3 py-2.5 grid grid-cols-[64px_72px_1fr_56px] gap-3 items-baseline">
+            <span class="mono text-[11px] tabular text-ink-2">14:23</span>
+            <span class="mono text-[11px] tabular text-accent text-right font-semibold">01:24</span>
+            <span class="text-[13px] text-ink truncate">pairing on the new onboarding flow</span>
+            <span class="mono text-[10px] text-ink-3 text-right uppercase tracking-[0.18em]">a3f1</span>
+          </div>
+          <div class="mt-3 grid grid-cols-[64px_72px_1fr_56px] gap-3 mono text-[9px] uppercase tracking-[0.2em] text-ink-3">
+            <span>time</span>
+            <span class="text-right">duration</span>
+            <span>note</span>
+            <span class="text-right">id</span>
+          </div>
+        </div>
+
+        <!-- status indicators -->
+        <div class="bg-paper-2 border border-rule rounded-2xl p-6" style="box-shadow: 0 12px 28px -16px rgba(12,10,7,0.2);">
+          <div class="mono text-[10px] uppercase tracking-[0.28em] text-ink-3 font-semibold mb-5">status · indicators</div>
+          <div class="space-y-4">
+            <div class="flex items-center gap-3">
+              <span class="crosshair text-ink-3"></span>
+              <span class="mono text-[10px] uppercase tracking-[0.2em] text-ink-3 font-semibold">idle</span>
+            </div>
+            <div class="flex items-center gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-accent pulse-rec"></span>
+              <span class="mono text-[10px] uppercase tracking-[0.2em] text-accent font-semibold">rec · 00:14:08</span>
+            </div>
+            <div class="flex items-center gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-positive"></span>
+              <span class="mono text-[10px] uppercase tracking-[0.2em] text-positive font-semibold">saved · 2s ago</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- tab states -->
+        <div class="bg-paper-2 border border-rule rounded-2xl p-6 md:col-span-2" style="box-shadow: 0 12px 28px -16px rgba(12,10,7,0.2);">
+          <div class="mono text-[10px] uppercase tracking-[0.28em] text-ink-3 font-semibold mb-5">tab · states</div>
+          <div class="flex items-end gap-1 border-b border-rule">
+            <button class="mono text-[11px] uppercase tracking-[0.18em] font-semibold px-3.5 py-2 border-b-2 tab-active -mb-px">log</button>
+            <button class="mono text-[11px] uppercase tracking-[0.18em] font-semibold px-3.5 py-2 border-b-2 border-transparent text-ink-3 -mb-px">stats</button>
+            <button class="mono text-[11px] uppercase tracking-[0.18em] font-semibold px-3.5 py-2 border-b-2 border-transparent text-ink-3 hover:text-ink-2 -mb-px transition-colors">stats (hover)</button>
+            <div class="flex-1"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ============================================================ -->
+  <!-- SCRIPT — state, timer, render -->
+  <!-- ============================================================ -->
+  <script>
+  'use strict';
+
+  // ============================================================
+  // STATE — single source of truth, persisted to localStorage
+  // ============================================================
+  const STORAGE_KEY = 'receipts.state.v9';
+
+  const state = {
+    running: false,
+    startedAt: null,
+    note: '',
+    sessions: [],
+  };
+
+  function load() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+      Object.assign(state, saved);
+    } catch (e) {}
+  }
+
+  function save() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch (e) {}
+  }
+
+  // ============================================================
+  // SAMPLE DATA — populated on first load, relative to "now"
+  // ============================================================
+  function hashId(seed) {
+    const n = Math.abs(Math.floor(seed * 2654435761) % 0x100000);
+    return n.toString(16).padStart(4, '0').slice(-4);
+  }
+
+  function seedIfEmpty() {
+    if (state.sessions.length > 0) return;
+
+    // Anchor at local midnight today so seed sessions land at intended local hours
+    // regardless of the user's timezone.
+    const localMidnight = (() => {
+      const d = new Date();
+      d.setHours(0, 0, 0, 0);
+      return d.getTime();
+    })();
+    const dayMs = 86400_000;
+
+    // Each sample: { ago (days back from today), h (local hour), m (local min), dur (ms), note }
+    const samples = [
+      // today
+      { ago: 0, h: 14, m: 13, dur: 25  * 60_000, note: 'pairing on the new onboarding flow' },
+      { ago: 0, h: 13, m: 18, dur: 47  * 60_000, note: 'tax form review, Q4 deductions' },
+      { ago: 0, h: 11, m: 43, dur: 18  * 60_000, note: 'client call · meridian studio' },
+      { ago: 0, h: 10, m: 35, dur: 92  * 60_000, note: 'auth refactor: backend sessions' },
+      { ago: 0, h: 8,  m: 55, dur: 35  * 60_000, note: 'writing, feature copy pass' },
+      // yesterday
+      { ago: 1, h: 13, m: 0,  dur: 64  * 60_000, note: 'database migration script' },
+      { ago: 1, h: 11, m: 12, dur: 110 * 60_000, note: 'design system tokens' },
+      { ago: 1, h: 8,  m: 48, dur: 22  * 60_000, note: 'standup + email triage' },
+      // 2 days ago
+      { ago: 2, h: 12, m: 36, dur: 78  * 60_000, note: 'API contract review' },
+      { ago: 2, h: 11, m: 24, dur: 45  * 60_000, note: 'invoice · november' },
+      // 3 days ago
+      { ago: 3, h: 13, m: 59, dur: 55  * 60_000, note: 'component library, buttons' },
+      { ago: 3, h: 10, m: 27, dur: 88  * 60_000, note: 'research, competitor analysis' },
+      // 4 days ago
+      { ago: 4, h: 14, m: 17, dur: 33  * 60_000, note: 'tests · payment flow' },
+      { ago: 4, h: 10, m: 35, dur: 72  * 60_000, note: 'logo redraft · third pass' },
+      // 5 days ago
+      { ago: 5, h: 14, m: 23, dur: 95  * 60_000, note: 'prototype · main panel' },
+      { ago: 5, h: 12, m: 5,  dur: 28  * 60_000, note: 'expense report · october' },
+      // 6 days ago
+      { ago: 6, h: 13, m: 41, dur: 67  * 60_000, note: 'research · accessibility' },
+      { ago: 6, h: 10, m: 47, dur: 41  * 60_000, note: 'writing, invoice copy' },
+    ];
+
+    state.sessions = samples.map((s, i) => {
+      const startedAt = localMidnight - s.ago * dayMs + s.h * 3600_000 + s.m * 60_000;
+      const endedAt = startedAt + s.dur;
+      return {
+        id: hashId(startedAt + i),
+        startedAt,
+        endedAt,
+        durationMs: s.dur,
+        note: s.note,
+      };
+    });
+
+    save();
+  }
+
+  // ============================================================
+  // FORMATTING
+  // ============================================================
+  function pad(n) { return n < 10 ? '0' + n : '' + n; }
+
+  function formatHMS(ms) {
+    const s = Math.max(0, Math.floor(ms / 1000));
+    return `${pad(Math.floor(s / 3600))}:${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}`;
+  }
+
+  function formatHMCompact(ms) {
+    const s = Math.max(0, Math.floor(ms / 1000));
+    const h = Math.floor(s / 3600);
+    const m = Math.floor(s / 60) % 60;
+    return `${pad(h)}:${pad(m)}`;
+  }
+
+  function formatHM(ms) {
+    const s = Math.max(0, Math.floor(ms / 1000));
+    const h = Math.floor(s / 3600);
+    const m = Math.floor(s / 60) % 60;
+    if (h > 0) return `${h}h ${pad(m)}m`;
+    return `${m}m`;
+  }
+
+  function formatTime(ts) {
+    const d = new Date(ts);
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  function formatClock(ts) {
+    const d = new Date(ts);
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  function formatDate(ts) {
+    const d = new Date(ts);
+    const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} · ${days[d.getDay()]}`;
+  }
+
+  // ============================================================
+  // COMPUTED
+  // ============================================================
+  function elapsedMs() {
+    return state.running ? Date.now() - state.startedAt : 0;
+  }
+
+  function startOfToday() {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  }
+
+  function startOfWeek() {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d.getTime() - d.getDay() * 86400_000;
+  }
+
+  function todayMs() {
+    const start = startOfToday();
+    let total = 0;
+    for (const s of state.sessions) {
+      if (s.startedAt >= start) total += s.durationMs;
+    }
+    if (state.running && state.startedAt >= start) total += elapsedMs();
+    return total;
+  }
+
+  function weekMs() {
+    const start = startOfWeek();
+    let total = 0;
+    for (const s of state.sessions) {
+      if (s.startedAt >= start) total += s.durationMs;
+    }
+    if (state.running && state.startedAt >= start) total += elapsedMs();
+    return total;
+  }
+
+  function todayCount() {
+    const start = startOfToday();
+    let n = 0;
+    for (const s of state.sessions) if (s.startedAt >= start) n++;
+    if (state.running && state.startedAt >= start) n++;
+    return n;
+  }
+
+  function weekCount() {
+    const start = startOfWeek();
+    let n = 0;
+    for (const s of state.sessions) if (s.startedAt >= start) n++;
+    if (state.running && state.startedAt >= start) n++;
+    return n;
+  }
+
+  function dailyBars() {
+    const bars = [];
+    const dayMs = 86400_000;
+    const todayStart = startOfToday();
+    for (let i = 6; i >= 0; i--) {
+      const dayStart = todayStart - i * dayMs;
+      const dayEnd = dayStart + dayMs;
+      let total = 0;
+      for (const s of state.sessions) {
+        if (s.startedAt >= dayStart && s.startedAt < dayEnd) total += s.durationMs;
+      }
+      if (state.running && state.startedAt >= dayStart && state.startedAt < dayEnd) {
+        total += elapsedMs();
+      }
+      bars.push({ dayStart, total });
+    }
+    return bars;
+  }
+
+  // ============================================================
+  // ACTIONS
+  // ============================================================
+  function currentNoteInput() {
+    const mainVal = document.getElementById('main-note').value.trim();
+    const popupVal = document.getElementById('popup-note').value.trim();
+    return popupVal || mainVal;
+  }
+
+  function setNoteInputs(value) {
+    document.getElementById('popup-note').value = value;
+    document.getElementById('main-note').value = value;
+  }
+
+  function start() {
+    const note = currentNoteInput();
+    if (!note) return;
+
+    // close previous session if any
+    if (state.running) {
+      state.sessions.push({
+        id: hashId(state.startedAt),
+        startedAt: state.startedAt,
+        endedAt: Date.now(),
+        durationMs: elapsedMs(),
+        note: state.note,
+      });
+    }
+
+    state.running = true;
+    state.startedAt = Date.now();
+    state.note = note;
+    save();
+    render();
+  }
+
+  function stop() {
+    if (!state.running) return;
+    state.sessions.push({
+      id: hashId(state.startedAt),
+      startedAt: state.startedAt,
+      endedAt: Date.now(),
+      durationMs: elapsedMs(),
+      note: state.note,
+    });
+    state.running = false;
+    state.startedAt = null;
+    state.note = '';
+    setNoteInputs('');
+    save();
+    render();
+  }
+
+  function toggleStart() {
+    if (state.running) stop();
+    else start();
+  }
+
+  // ============================================================
+  // POPUP
+  // ============================================================
+  function togglePopup(e) {
+    if (e) e.stopPropagation();
+    const popup = document.getElementById('popup');
+    const bg = document.getElementById('popup-bg-close');
+    if (popup.classList.contains('hidden')) {
+      popup.classList.remove('hidden');
+      bg.classList.add('active');
+    } else {
+      closePopup();
+    }
+  }
+
+  function closePopup() {
+    document.getElementById('popup').classList.add('hidden');
+    document.getElementById('popup-bg-close').classList.remove('active');
+  }
+
+  // ============================================================
+  // TABS
+  // ============================================================
+  function setTab(tab) {
+    const showLog = tab === 'log';
+    const showWeek = tab === 'week';
+    const showStats = tab === 'stats';
+
+    const log = document.getElementById('panel-log');
+    const week = document.getElementById('panel-week');
+    const stats = document.getElementById('panel-stats');
+    const tabLog = document.getElementById('tab-log');
+    const tabWeek = document.getElementById('tab-week');
+    const tabStats = document.getElementById('tab-stats');
+
+    if (log) log.classList.toggle('hidden', !showLog);
+    if (week) week.classList.toggle('hidden', !showWeek);
+    if (stats) stats.classList.toggle('hidden', !showStats);
+
+    if (tabLog) {
+      tabLog.setAttribute('aria-selected', showLog);
+      tabLog.classList.toggle('tab-active', showLog);
+      tabLog.classList.toggle('text-ink-3', !showLog);
+    }
+    if (tabWeek) {
+      tabWeek.setAttribute('aria-selected', showWeek);
+      tabWeek.classList.toggle('tab-active', showWeek);
+      tabWeek.classList.toggle('text-ink-3', !showWeek);
+    }
+    if (tabStats) {
+      tabStats.setAttribute('aria-selected', showStats);
+      tabStats.classList.toggle('tab-active', showStats);
+      tabStats.classList.toggle('text-ink-3', !showStats);
+    }
+  }
+
+  // ============================================================
+  // RENDER
+  // ============================================================
+  function render() {
+    const ms = elapsedMs();
+
+    // popup
+    const popupStatus = document.getElementById('popup-status');
+    const popupRec = document.getElementById('popup-rec');
+    const popupTime = document.getElementById('popup-time');
+    const popupBtn = document.getElementById('popup-btn');
+
+    popupStatus.textContent = state.running ? 'rec' : 'idle';
+    popupStatus.classList.toggle('text-accent', state.running);
+    popupStatus.classList.toggle('text-ink-3', !state.running);
+    popupRec.classList.toggle('hidden', !state.running);
+
+    popupTime.textContent = formatHMS(ms);
+    popupTime.classList.toggle('text-ink', state.running);
+    popupTime.classList.toggle('text-ink-3', !state.running);
+
+    const popupNoteVal = document.getElementById('popup-note').value.trim();
+    popupBtn.disabled = !state.running && !popupNoteVal;
+    popupBtn.textContent = state.running ? 'Stop' : 'Start';
+    popupBtn.classList.toggle('bg-accent', state.running);
+    popupBtn.classList.toggle('bg-ink', !state.running);
+
+    // main panel timer
+    const mainTime = document.getElementById('main-time');
+    mainTime.textContent = formatHMS(ms);
+    mainTime.classList.toggle('text-ink', state.running);
+    mainTime.classList.toggle('text-ink-3', !state.running);
+    document.getElementById('main-rec').classList.toggle('hidden', !state.running);
+
+    const mainBtn = document.getElementById('main-btn');
+    const mainNoteVal = document.getElementById('main-note').value.trim();
+    mainBtn.disabled = !state.running && !mainNoteVal;
+    mainBtn.textContent = state.running ? 'Stop' : 'Start';
+    mainBtn.classList.toggle('bg-accent', state.running);
+    mainBtn.classList.toggle('bg-ink', !state.running);
+
+    // main header stats
+    document.getElementById('main-today').textContent = formatHMCompact(todayMs());
+    document.getElementById('main-week').textContent = formatHMCompact(weekMs());
+    document.getElementById('main-sessions').textContent = weekCount();
+    document.getElementById('main-date').textContent = formatDate(Date.now());
+
+    // stats panel
+    document.getElementById('stats-today').textContent = formatHMCompact(todayMs());
+    document.getElementById('stats-today-count').textContent = `${todayCount()} sessions`;
+    document.getElementById('stats-week').textContent = formatHMCompact(weekMs());
+    document.getElementById('stats-week-count').textContent = `${weekCount()} sessions`;
+
+    // log + chart + calendar
+    renderLog();
+    renderChart();
+    renderCalendarHeader();
+    renderCalendar();
+    renderEmptyCalendarHeader();
+    renderEmptyCalendarDays();
+
+    // menu bar
+    document.getElementById('menu-rec-dot').classList.toggle('hidden', !state.running);
+    const menuTime = document.getElementById('menu-time');
+    menuTime.classList.toggle('hidden', !state.running);
+    if (state.running) menuTime.textContent = formatHMS(ms);
+
+    document.getElementById('menu-clock').textContent = formatClock(Date.now());
+  }
+
+  function renderLog() {
+    const container = document.getElementById('log-rows');
+    if (!container) return;
+    const sorted = [...state.sessions].sort((a, b) => b.startedAt - a.startedAt);
+    container.innerHTML = sorted.map(s => `
+      <div class="grid grid-cols-[64px_72px_1fr_56px] gap-3 py-2.5 items-baseline row-hover transition-colors rounded px-2 -mx-2">
+        <span class="mono text-[11px] tabular text-ink-2">${formatTime(s.startedAt)}</span>
+        <span class="mono text-[11px] tabular text-accent text-right font-semibold">${formatHMCompact(s.durationMs)}</span>
+        <span class="text-[13px] text-ink truncate">${escapeHtml(s.note)}</span>
+        <span class="mono text-[10px] text-ink-3 text-right uppercase tracking-[0.18em]">${s.id}</span>
+      </div>
+    `).join('');
+  }
+
+  function renderChart() {
+    const container = document.getElementById('chart-bars');
+    if (!container) return;
+    const bars = dailyBars();
+    const max = Math.max(...bars.map(b => b.total), 1);
+    const todayStart = startOfToday();
+    const hours = (ms) => (ms / 3600_000).toFixed(1);
+
+    container.innerHTML = bars.map((b) => {
+      const isToday = b.dayStart === todayStart;
+      const date = new Date(b.dayStart);
+      const dayLabel = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][date.getDay()];
+      const pct = (b.total / max) * 100;
+      const h = b.total > 0 ? Math.max(pct, 4) : 0;
+      return `
+        <div class="flex-1 flex flex-col items-stretch gap-2 group min-w-0">
+          <div class="flex-1 flex items-end">
+            <div class="w-full ${isToday ? 'bg-accent' : 'bg-ink-2'} transition-all" style="height: ${h}%"></div>
+          </div>
+          <div class="text-center mono text-[9px] uppercase tracking-[0.18em] ${isToday ? 'text-accent font-semibold' : 'text-ink-3'} tabular">${dayLabel} · ${hours(b.total)}h</div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  // ============================================================
+  // WEEK (CALENDAR)
+  // ============================================================
+  const CAL_ROW_H = 32;
+  const CAL_START_HOUR = 8;
+
+  function renderCalendarAxes() {
+    const hours = [8, 10, 12, 14, 16, 18, 20];
+    document.querySelectorAll('.cal-axis').forEach(axis => {
+      axis.innerHTML = hours.map(hour =>
+        `<span style="top: ${(hour - CAL_START_HOUR) * CAL_ROW_H}px">${pad(hour)}:00</span>`
+      ).join('');
+    });
+    document.querySelectorAll('.cal-lines').forEach(lines => {
+      lines.innerHTML = hours.map(hour =>
+        `<span style="top: ${(hour - CAL_START_HOUR) * CAL_ROW_H}px"></span>`
+      ).join('');
+    });
+  }
+
+  function weeklyBlocks() {
+    const todayStart = startOfToday();
+    const dayMs = 86400_000;
+    const weekStart = todayStart - new Date().getDay() * dayMs;
+    const days = [];
+
+    for (let i = 0; i < 7; i++) {
+      const dayStart = weekStart + i * dayMs;
+      const dayEnd = dayStart + dayMs;
+      const blocks = [];
+      for (const s of state.sessions) {
+        if (s.startedAt >= dayStart && s.startedAt < dayEnd) {
+          blocks.push({ ...s, current: false });
+        }
+      }
+      // include running session if in this day
+      if (state.running && state.startedAt >= dayStart && state.startedAt < dayEnd) {
+        blocks.push({
+          id: hashId(state.startedAt),
+          startedAt: state.startedAt,
+          endedAt: Date.now(),
+          durationMs: elapsedMs(),
+          note: state.note,
+          current: true,
+        });
+      }
+      days.push({ dayStart, blocks });
+    }
+    return days;
+  }
+
+  function renderEmptyCalendarHeader() {
+    const container = document.getElementById('empty-cal-header');
+    if (!container) return;
+    const today = new Date();
+    const todayStart = (() => { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); })();
+    const dayMs = 86400_000;
+    const weekStart = todayStart - today.getDay() * dayMs;
+    const dayLabels = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+
+    let html = '';
+    for (let i = 0; i < 7; i++) {
+      const dayStart = weekStart + i * dayMs;
+      const date = new Date(dayStart);
+      const isToday = dayStart === todayStart;
+      const dateLabel = `${pad(date.getMonth() + 1)}/${pad(date.getDate())}`;
+      const labelColor = isToday ? 'text-accent' : 'text-ink-3';
+      html += `
+        <div class="px-1 py-2.5 text-center">
+          <div class="mono text-[10px] uppercase tracking-[0.2em] font-semibold ${labelColor}">${dayLabels[i]}</div>
+          <div class="mono text-[9px] ${labelColor} tabular mt-0.5">${dateLabel}</div>
+        </div>
+      `;
+    }
+    container.innerHTML = html;
+  }
+
+  function renderEmptyCalendarDays() {
+    const container = document.getElementById('empty-cal-days');
+    if (!container) return;
+    const today = new Date();
+    const todayStart = (() => { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); })();
+    const dayMs = 86400_000;
+    const weekStart = todayStart - today.getDay() * dayMs;
+    const now = new Date();
+
+    let html = '';
+    for (let i = 0; i < 7; i++) {
+      const dayStart = weekStart + i * dayMs;
+      const dow = new Date(dayStart).getDay();
+      const isToday = dayStart === todayStart;
+      const isWeekend = dow === 0 || dow === 6;
+      let todayDot = '';
+      if (isToday) {
+        const nowHour = now.getHours() + now.getMinutes() / 60;
+        const top = (nowHour - 8) * 32;
+        const above = top < 0;
+        const below = top > 12 * 32;
+        if (top >= 0 && top <= 12 * 32) {
+          todayDot = `
+            <div class="absolute left-0 right-0 z-10 pointer-events-none" style="top: ${top}px;">
+              <div class="h-px bg-accent"></div>
+              <div class="absolute -left-[3px] -top-[3px] w-[7px] h-[7px] rounded-full bg-accent ring-2 ring-paper"></div>
+            </div>
+          `;
+        } else if (above || below) {
+          todayDot = `<div class="absolute ${above ? 'top-0' : 'bottom-0'} left-0 right-0 h-0.5 bg-accent z-10 pointer-events-none"></div>`;
+        }
+      }
+      html += `
+        <div class="flex-1 relative ${isToday ? 'bg-paper-3/35' : ''} ${isWeekend && !isToday ? 'opacity-60' : ''}">
+          ${todayDot}
+        </div>
+      `;
+    }
+    container.innerHTML = html;
+  }
+
+  function renderCalendarHeader() {
+    const container = document.getElementById('cal-header');
+    if (!container) return;
+    const days = weeklyBlocks();
+    const todayStart = startOfToday();
+    const dayLabels = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+
+    container.innerHTML = days.map(({ dayStart }) => {
+      const date = new Date(dayStart);
+      const isToday = dayStart === todayStart;
+      const dateLabel = `${pad(date.getMonth() + 1)}/${pad(date.getDate())}`;
+      return `
+        <div class="px-1 py-2.5 text-center">
+          <div class="mono text-[10px] uppercase tracking-[0.2em] font-semibold ${isToday ? 'text-accent' : 'text-ink'}">${dayLabels[date.getDay()]}</div>
+          <div class="mono text-[9px] ${isToday ? 'text-accent' : 'text-ink-3'} tabular mt-0.5">${dateLabel}</div>
+        </div>
+      `;
+    }).join('');
+
+    const range = document.getElementById('week-range');
+    if (range) {
+      const first = new Date(days[0].dayStart);
+      const last = new Date(days[6].dayStart);
+      range.textContent = `${pad(first.getMonth() + 1)}/${pad(first.getDate())} – ${pad(last.getMonth() + 1)}/${pad(last.getDate())}`;
+    }
+  }
+
+  function renderCalendar() {
+    const container = document.getElementById('cal-days');
+    if (!container) return;
+    const days = weeklyBlocks();
+    const todayStart = startOfToday();
+    const now = new Date();
+
+    document.getElementById('cal-empty').hidden = days.some(day => day.blocks.length > 0);
+    container.innerHTML = days.map(({ dayStart, blocks }) => {
+      const isToday = dayStart === todayStart;
+      const date = new Date(dayStart);
+      const dow = date.getDay();
+      const isWeekend = dow === 0 || dow === 6;
+
+      const blocksHtml = blocks.map(b => {
+        const startTime = new Date(b.startedAt);
+        const startHour = startTime.getHours() + startTime.getMinutes() / 60;
+        const top = (startHour - CAL_START_HOUR) * CAL_ROW_H;
+        const height = (b.durationMs / 3600_000) * CAL_ROW_H;
+
+        // Off-range indicator for current session that started outside 8–20
+        if (b.current && (top < -4 || top > 12 * CAL_ROW_H)) {
+          const above = top < -4;
+          return `
+            <div class="absolute ${above ? 'top-1' : 'bottom-1'} left-0 right-0 z-[5] bg-accent text-paper rounded-sm overflow-hidden px-1.5 py-0.5 mono text-[10px] leading-tight cursor-default flex items-center gap-1.5"
+                 title="${escapeHtml(b.note)} · started before 8 or after 20">
+              <span class="w-1 h-1 rounded-full bg-paper pulse-rec shrink-0"></span>
+              <span class="truncate font-semibold">${escapeHtml(b.note)}</span>
+              <span class="text-[9px] opacity-75 tabular ml-auto">${formatClock(b.startedAt)}</span>
+            </div>
+          `;
+        }
+
+        if (top < -4 || top > 12 * CAL_ROW_H) return '';
+
+        const bg = b.current
+          ? 'bg-accent text-paper'
+          : (isToday ? 'bg-ink text-paper' : 'bg-ink-2 text-paper');
+
+        return `
+          <div class="absolute ${b.current ? 'left-0 right-0 z-[5]' : 'left-0.5 right-0.5'} ${bg} rounded-sm overflow-hidden px-1.5 py-0.5 mono text-[10px] leading-tight cursor-default"
+               style="top: ${top}px; height: ${Math.max(height, 14)}px;"
+               title="${escapeHtml(b.note)} · ${formatHM(b.durationMs)}">
+            ${height >= 22 ? `<div class="truncate font-semibold">${escapeHtml(b.note)}</div>` : ''}
+            ${height >= 40 ? `<div class="text-[9px] opacity-75 tabular">${formatHM(b.durationMs)}</div>` : ''}
+          </div>
+        `;
+      }).join('');
+
+      let nowIndicator = '';
+      if (isToday) {
+        const nowHour = now.getHours() + now.getMinutes() / 60;
+        const top = (nowHour - CAL_START_HOUR) * CAL_ROW_H;
+        if (top >= 0 && top <= 12 * CAL_ROW_H) {
+          nowIndicator = `
+            <div class="absolute left-0 right-0 z-10 pointer-events-none" style="top: ${top}px;">
+              <div class="h-px bg-accent"></div>
+              <div class="absolute -left-[3px] -top-[3px] w-[7px] h-[7px] rounded-full bg-accent ring-2 ring-paper"></div>
+            </div>
+          `;
+        } else {
+          // Off-range now indicator: a thin accent bar at the top or bottom edge
+          const above = top < 0;
+          nowIndicator = `
+            <div class="absolute ${above ? 'top-0' : 'bottom-0'} left-0 right-0 h-0.5 bg-accent z-10 pointer-events-none"></div>
+          `;
+        }
+      }
+
+      return `
+        <div class="flex-1 relative ${isToday ? 'bg-paper-3/35' : ''} ${isWeekend && !isToday ? 'opacity-60' : ''}">
+          ${blocksHtml}
+          ${nowIndicator}
+        </div>
+      `;
+    }).join('');
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+  }
+
+  // ============================================================
+  // EVENT WIRING
+  // ============================================================
+  let tickInterval = null;
+
+  function startTicking() {
+    if (tickInterval) return;
+    tickInterval = setInterval(() => {
+      if (state.running) render();
+      else {
+        document.getElementById('menu-clock').textContent = formatClock(Date.now());
+      }
+    }, 1000);
+  }
+
+  function wire() {
+    document.getElementById('popup-btn').addEventListener('click', toggleStart);
+    document.getElementById('main-btn').addEventListener('click', toggleStart);
+
+    // note input sync across surfaces + re-render for button enabled state
+    const popupNote = document.getElementById('popup-note');
+    const mainNote = document.getElementById('main-note');
+    popupNote.addEventListener('input', () => {
+      mainNote.value = popupNote.value;
+      render();
+    });
+    mainNote.addEventListener('input', () => {
+      popupNote.value = mainNote.value;
+      render();
+    });
+
+    // dismiss popup with escape
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') closePopup();
+    });
+
+    // cross-tab sync
+    window.addEventListener('storage', e => {
+      if (e.key === STORAGE_KEY) {
+        load();
+        render();
+      }
+    });
+  }
+
+  // ============================================================
+  // INIT
+  // ============================================================
+  load();
+  seedIfEmpty();
+  renderCalendarAxes();
+  wire();
+  render();
+  startTicking();
+
+  // expose for inline handlers (togglePopup, closePopup, setTab)
+  window.togglePopup = togglePopup;
+  window.closePopup = closePopup;
+  window.setTab = setTab;
+  </script>
+</body>
+</html>
