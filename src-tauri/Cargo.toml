@@ -2,6 +2,7 @@
 name = "receipts"
 version = "0.1.0"
 description = "Receipts — a local menu-bar time tracker"
+license = "AGPL-3.0-or-later"
 authors = ["aungmyokyaw"]
 edition = "2021"
 

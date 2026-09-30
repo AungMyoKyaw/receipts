@@ -27,6 +27,18 @@ bun run dev
 
 Open `http://127.0.0.1:1420/`. The labeled browser preview stores separate data in `localStorage`; it does not access native SQLite. `/?surface=widget` previews the popup. Preview tabs synchronize using Web Locks and storage events. No sample data is inserted automatically.
 
+## Product website
+
+The standalone product website lives in [`website/`](website/README.md). It does not connect to the app's timer, database or browser-preview storage.
+
+```sh
+cd website
+bun install --frozen-lockfile
+bun run dev
+```
+
+Open `http://127.0.0.1:1421/`. `bun run build` in that directory produces a statically prerendered website in `website/build/`. The current installation action describes a local source build; no signed download is configured.
+
 ## Architecture
 
 - **Rust** owns SQLite writes and the timer state. `start_timer`, `set_note` and `stop_timer` return committed snapshots. Stopping inserts one session and clears the timer in the same transaction. Duplicate/stale commands cannot save another row or stop a newer timer.
