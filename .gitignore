@@ -5,6 +5,7 @@ node_modules
 /package
 /.playwright-cli
 /.impeccable/critique/
+/.impeccable/review/
 .env
 .env.*
 !.env.example
