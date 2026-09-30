@@ -2,6 +2,28 @@
 
 A local-first macOS menu-bar time tracker. The popup and log window share one durable timer. Visual reference: [`prototype/`](prototype/README.md). Design system: [`DESIGN.md`](DESIGN.md).
 
+## Install on macOS
+
+Requires macOS 13.3 or later. Homebrew selects the Apple Silicon or Intel build automatically:
+
+```sh
+brew install --cask AungMyoKyaw/homebrew-tap/receipts
+open -a Receipts
+```
+
+Alternatively, download the appropriate DMG from [GitHub Releases](https://github.com/AungMyoKyaw/receipts/releases/latest) and drag `Receipts.app` into Applications. Bun, Rust and Xcode are not required for either binary installation.
+
+Builds are ad-hoc signed, not Apple Developer ID signed or notarized. If macOS blocks the first launch, open **System Settings → Privacy & Security → Open Anyway** for Receipts. The cask keeps normal macOS quarantine checks.
+
+To update:
+
+```sh
+brew update
+brew upgrade --cask AungMyoKyaw/homebrew-tap/receipts
+```
+
+Regular uninstall preserves your local session database. `brew uninstall --cask --zap AungMyoKyaw/homebrew-tap/receipts` removes application data, including saved sessions.
+
 ## Run
 
 Requires macOS 13.3 or later (modern WebKit for Tailwind 4), Bun, Rust and the Xcode command-line tools.
@@ -37,7 +59,7 @@ bun install --frozen-lockfile
 bun run dev
 ```
 
-Open `http://127.0.0.1:1421/`. `bun run build` in that directory produces a statically prerendered website in `website/build/`. The current installation action describes a local source build; no signed download is configured.
+Open `http://127.0.0.1:1421/`. `bun run build` in that directory produces a statically prerendered website in `website/build/`. The installation section provides Homebrew instructions and architecture-specific DMG links.
 
 ## Architecture
 
@@ -82,8 +104,18 @@ make run
 
 This builds and opens `src-tauri/target/debug/bundle/macos/Receipts.app` with the frontend embedded. It does not require Vite or port 1420. Use this for local testing without a development server.
 
-For a release bundle, run `bun run tauri build`. Distribution signing and notarization are not configured.
+For a release bundle, run `bun run tauri build`. Bundles use ad-hoc signing; Apple Developer ID signing and notarization are not configured.
 
-### Blank development window
+## Releases and Homebrew
+
+The release workflow validates version consistency, tests the app, builds Apple Silicon and Intel installers, verifies app signatures, and publishes both DMGs with `SHA256SUMS` only after both builds succeed. Trigger it with a `v<version>` tag matching `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json`, or dispatch the workflow manually.
+
+After each release, update the version and architecture-specific hashes in [`homebrew-tap/Casks/receipts.rb`](https://github.com/AungMyoKyaw/homebrew-tap/blob/master/Casks/receipts.rb), the tap catalog, and `website/src/lib/distribution.ts`. Validate the cask and both release assets before publishing those changes.
+
+## Blank development window
 
 Do not launch a binary produced by `tauri dev` directly from `target/debug/receipts`: it loads the Vite `devUrl`, so stopping Vite leaves the webview blank. Start development with `bun run tauri dev`, which manages the server, or use `make run` for a self-contained app. Restart the development app after restoring an unavailable server.
+
+## License
+
+[GNU Affero General Public License, version 3 or later](LICENSE) (`AGPL-3.0-or-later`).

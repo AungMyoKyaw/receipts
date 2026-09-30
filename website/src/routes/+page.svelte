@@ -2,6 +2,7 @@
   import { base } from '$app/paths';
   import TimerDemo from '$lib/TimerDemo.svelte';
   import Arrow from '$lib/Arrow.svelte';
+  import { downloads, installCommand, releaseUrl, repositoryUrl, version } from '$lib/distribution';
 
   let demo: TimerDemo | undefined;
   const views = [
@@ -16,8 +17,9 @@
     { question: 'Where does my work go?', answer: 'The Mac app saves sessions in a local SQLite database. No account, no cloud sync and no multi-device setup. The website demo is separate: it keeps nothing after you leave the page.' },
     { question: 'What happens if I quit while recording?', answer: 'The app saves the timer’s start time, not just a running counter. When you reopen receipts, the timer includes time spent while the app was closed. Closing the log only hides the window; recording continues.' },
     { question: 'Can I correct a session?', answer: 'Yes. Edit the note or start and end times in the log, or delete a session after confirmation. Just stopped too soon? The Mac app gives you five seconds to undo your last stop.' },
-    { question: 'Which Macs does it work on?', answer: 'Receipts currently targets macOS 13.3 or later. Building it locally also needs Bun, Rust and the Xcode command-line tools. Windows and Linux releases are not currently provided.' },
-    { question: 'Where is the download?', answer: 'A signed, notarized download is not available here yet. For now, build and run the app from a local copy of the source. The installation section lists the exact commands; there is no checkout or waitlist on this website.' }
+    { question: 'Which Macs does it work on?', answer: 'Receipts supports macOS 13.3 or later, with separate builds for Apple Silicon and Intel. Install with Homebrew or download a DMG below. Bun, Rust and Xcode are only needed to build from source. Windows and Linux releases are not provided.' },
+    { question: 'How do I install and update it?', answer: 'Run the Homebrew command below, then open Receipts from Applications. Homebrew selects the build for your Mac. To update, run brew update, then brew upgrade --cask AungMyoKyaw/homebrew-tap/receipts. You can also install a DMG from GitHub Releases.' },
+    { question: 'Why does macOS ask me to approve it?', answer: 'These builds are ad-hoc signed, not Apple Developer ID signed or notarized. If macOS blocks the first launch, open System Settings, then Privacy & Security, and choose Open Anyway for Receipts. Homebrew keeps the normal macOS quarantine checks.' }
   ];
 
   function focusDemo(event: MouseEvent) {
@@ -47,7 +49,9 @@
   <meta property="og:description" content="A menu-bar time tracker for Mac. A note, a timer, a local record of your work." />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="receipts" />
-  <meta property="og:image" content={`${base}/images/week.webp`} />
+  <link rel="canonical" href="https://aungmyokyaw.github.io/receipts/" />
+  <meta property="og:url" content="https://aungmyokyaw.github.io/receipts/" />
+  <meta property="og:image" content="https://aungmyokyaw.github.io/receipts/images/week.webp" />
   <meta property="og:image:alt" content="Receipts weekly calendar with illustrative work sessions" />
   <meta name="twitter:card" content="summary_large_image" />
 </svelte:head>
@@ -173,17 +177,21 @@
     </div>
   </section>
 
-  <section id="install" aria-labelledby="install-heading" class="grid scroll-mt-10 gap-10 py-16 sm:py-24 lg:grid-cols-[1.35fr_1fr] lg:gap-14">
+  <section id="install" aria-labelledby="install-heading" class="grid grid-cols-1 scroll-mt-10 gap-10 py-16 sm:py-24 lg:grid-cols-[1.35fr_1fr] lg:gap-14">
     <div>
       <h2 id="install-heading" class="font-display text-[clamp(2.5rem,4.4vw,4rem)] leading-[1.06] tracking-[-0.03em]">Less setup.<br />More actual work.</h2>
-      <p class="mt-6 max-w-[410px] text-base leading-7 text-ink-2">Receipts is currently a source build, not a signed download. With a local copy of the app source, these commands build and open it on your Mac.</p>
-      <a href="#demo" onclick={focusDemo} class="mt-7 inline-flex min-h-11 items-center gap-3 text-sm font-medium underline decoration-rule hover:text-accent">Try it here first <Arrow class="h-4 w-4" /></a>
+      <p class="mt-6 max-w-[410px] text-base leading-7 text-ink-2">Install with Homebrew. It picks the right build for your Mac. Then open Receipts from Applications and start a session.</p>
+      <a href={releaseUrl} class="mt-7 inline-flex min-h-11 items-center gap-3 text-sm font-medium underline decoration-rule hover:text-accent">Release notes · v{version} <Arrow class="h-4 w-4" /></a>
     </div>
-    <div class="max-w-[450px] self-center">
-      <p class="mb-3 font-mono text-[11px] leading-5 text-ink-3">IN THE APP SOURCE DIRECTORY</p>
-      <pre class="overflow-x-auto rounded-lg border border-rule bg-paper-2 px-5 py-5 font-mono text-[13px] leading-8 text-ink"><code>bun install --frozen-lockfile
-make run</code></pre>
-      <p class="mt-4 text-[12px] leading-6 text-ink-3">Requires macOS 13.3+, Bun, Rust and the Xcode command-line tools. Run from the repository root, not the website directory. Signing and notarization are not configured.</p>
+    <div class="min-w-0 max-w-[450px] self-center">
+      <pre aria-label="Homebrew install command" class="overflow-x-auto rounded-lg border border-rule bg-paper-2 px-5 py-5 font-mono text-[13px] leading-8 text-ink"><code>{installCommand}</code></pre>
+      <p class="mt-4 text-[12px] leading-6 text-ink-3">Requires macOS 13.3+ and <a href="https://brew.sh/" class="underline decoration-rule hover:text-accent">Homebrew</a>. No development tools needed.</p>
+      <div class="mt-5 flex flex-wrap gap-x-6 gap-y-2">
+        {#each downloads as download}
+          <a href={download.url} class="inline-flex min-h-11 items-center gap-2 text-sm font-medium underline decoration-rule hover:text-accent">Download for {download.label} <Arrow direction="down" class="h-4 w-4" /></a>
+        {/each}
+      </div>
+      <p class="mt-3 text-[12px] leading-6 text-ink-3">Ad-hoc signed; not notarized. If the first launch is blocked, choose Open Anyway in System Settings → Privacy &amp; Security. Prefer a source build? <a href={`${repositoryUrl}#run`} class="underline decoration-rule hover:text-accent">Read the development instructions</a>.</p>
     </div>
   </section>
 
@@ -195,7 +203,7 @@ make run</code></pre>
     <div class="proof-rule" aria-hidden="true"></div>
     <div class="flex flex-wrap items-center justify-between gap-6 pt-7">
       <a href="#top" aria-label="receipts home" class="font-display text-[36px] leading-none tracking-[-0.03em]">receipts<span class="text-accent">.</span></a>
-      <span class="font-mono text-[10px] uppercase tracking-[0.1em] text-ink-3">A proof of work, set in type.</span>
+      <a href={`${repositoryUrl}/blob/master/LICENSE`} class="inline-flex min-h-11 items-center text-[12px] text-ink-3 underline decoration-rule hover:text-accent">Source · AGPL-3.0-or-later</a>
       <a href="#main" class="inline-flex min-h-11 items-center gap-3 text-[12px] text-ink-3 underline decoration-rule hover:text-accent">Back to top <Arrow class="h-3.5 w-3.5 rotate-[-90deg]" /></a>
     </div>
   </footer>

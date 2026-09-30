@@ -2,7 +2,7 @@ async (page) => {
   const assert = (condition, message) => { if (!condition) throw new Error(message); };
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
-  await page.goto('http://127.0.0.1:1421/');
+  await page.goto(page.url() === 'about:blank' ? 'http://127.0.0.1:1421/' : page.url());
   await page.waitForFunction(() => !document.querySelector('button[type="submit"]').disabled);
   const note = page.getByLabel('What are you working on?');
   const submit = page.locator('button[type="submit"]');
@@ -40,6 +40,11 @@ async (page) => {
     assert(layout.page <= width, `Page overflows at ${width}px`);
     assert(layout.timer <= layout.button, `Timer overlaps Start at ${width}px`);
   }
+  const install = page.locator('#install');
+  assert((await install.locator('code').innerText()).replace(/\\\n\s*/g, '') === 'brew install --cask AungMyoKyaw/homebrew-tap/receipts', 'Install command must use the public tap');
+  assert(await install.getByRole('link', { name: 'Download for Apple Silicon' }).isVisible(), 'Apple Silicon download must be available');
+  assert(await install.getByRole('link', { name: 'Download for Intel' }).isVisible(), 'Intel download must be available');
+  assert((await install.innerText()).includes('not notarized'), 'First-launch requirements must be documented');
   assert(await page.evaluate(() => localStorage.length === 0), 'Demo must not write local records');
   assert(errors.length === 0, errors.join('\n'));
   return { status: 'pass', viewports: [320, 390, 768, 1024, 1440] };

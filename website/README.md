@@ -41,8 +41,9 @@ GitHub Actions deploys this site to [https://aungmyokyaw.github.io/receipts/](ht
 
 - The timer demo is in-memory and separate from all app data. Navigation away from the page discards it.
 - Screenshots show the real app with illustrative sessions from `../screenshots/`.
-- The current install action explains how to build the app locally. No signed/notarized download, remote repository, pricing or waitlist endpoint is invented.
-- Before public launch, configure a real distribution/source URL and canonical domain. Update the Open Graph image to an absolute URL on that domain. Review platform requirements if release support changes.
+- The installation section shows the real Homebrew command and versioned Apple Silicon/Intel DMG links. `src/lib/distribution.ts` owns the release version and URLs; update it only after both release assets are available and the cask is published.
+- Builds require macOS 13.3+ and are ad-hoc signed, not Apple Developer ID signed or notarized. Installation copy explains first-launch approval without bypassing quarantine.
+- Canonical and Open Graph URLs use the published GitHub Pages domain. No pricing, analytics, account or waitlist endpoint is invented. Review platform requirements when release support changes.
 - No analytics or third-party font requests are included.
 
 ## Design authority
