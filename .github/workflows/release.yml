@@ -7,12 +7,42 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Validate release version
+        id: version
+        run: |
+          python3 - <<'PY'
+          import json, os, tomllib
+          from pathlib import Path
+          version = json.loads(Path('src-tauri/tauri.conf.json').read_text())['version']
+          assert json.loads(Path('package.json').read_text())['version'] == version
+          assert tomllib.loads(Path('src-tauri/Cargo.toml').read_text())['package']['version'] == version
+          tag = f'v{version}'
+          if os.environ['GITHUB_REF_TYPE'] == 'tag':
+              assert os.environ['GITHUB_REF_NAME'] == tag, 'Tag must match the application version'
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'tag={tag}\n')
+          PY
+
   build:
+    needs: prepare
+    permissions:
+      contents: write
     name: Build macOS ${{ matrix.arch }} release
     runs-on: macos-latest
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -31,14 +61,54 @@ jobs:
           targets: ${{ matrix.target }}
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
-      - name: Build and publish macOS installers
+      - name: Verify frontend and native state
+        run: |
+          bun run check
+          bun run test:timezones
+          cargo test --locked --manifest-path src-tauri/Cargo.toml --lib
+      - name: Build and upload macOS installers
         uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          args: --target ${{ matrix.target }}
-          tagName: ${{ github.ref_name }}
-          releaseName: Receipts ${{ github.ref_name }}
-          releaseBody: macOS builds for Apple Silicon and Intel. These builds are unsigned and not notarized.
-          releaseDraft: false
+          args: --target ${{ matrix.target }} -- --locked
+          tagName: ${{ needs.prepare.outputs.tag }}
+          releaseName: Receipts ${{ needs.prepare.outputs.tag }}
+          releaseBody: |
+            A local-first macOS menu-bar time tracker. Requires macOS 13.3 or later.
+
+            Choose the aarch64 DMG for Apple Silicon or the x64 DMG for Intel.
+            Builds are ad-hoc signed, not Developer ID signed or notarized.
+            If macOS blocks the first launch, use System Settings > Privacy & Security > Open Anyway.
+
+            Source is distributed under AGPL-3.0-or-later. See LICENSE in the repository.
+          releaseDraft: true
           prerelease: false
+      - name: Verify app signature and architecture
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          app="src-tauri/target/$TARGET/release/bundle/macos/Receipts.app"
+          codesign --verify --deep --strict "$app"
+          file "$app/Contents/MacOS/receipts"
+          test "$(/usr/libexec/PlistBuddy -c 'Print LSMinimumSystemVersion' "$app/Contents/Info.plist")" = "13.3"
+
+  publish:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ needs.prepare.outputs.tag }}
+    steps:
+      - name: Verify installers and publish complete release
+        run: |
+          mkdir installers
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*.dmg' --dir installers
+          version="${TAG#v}"
+          test -s "installers/Receipts_${version}_aarch64.dmg"
+          test -s "installers/Receipts_${version}_x64.dmg"
+          (cd installers && sha256sum *.dmg > SHA256SUMS && sha256sum --check SHA256SUMS)
+          gh release upload "$TAG" installers/SHA256SUMS --repo "$GITHUB_REPOSITORY" --clobber
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false
