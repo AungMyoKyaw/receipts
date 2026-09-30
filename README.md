@@ -29,7 +29,7 @@ Open `http://127.0.0.1:1420/`. The labeled browser preview stores separate data 
 
 ## Product website
 
-The standalone product website lives in [`website/`](website/README.md). It does not connect to the app's timer, database or browser-preview storage.
+The standalone product website is published at [aungmyokyaw.github.io/receipts](https://aungmyokyaw.github.io/receipts/). Its source lives in [`website/`](website/README.md). It does not connect to the app's timer, database or browser-preview storage.
 
 ```sh
 cd website

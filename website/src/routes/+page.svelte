@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { base } from '$app/paths';
   import TimerDemo from '$lib/TimerDemo.svelte';
   import Arrow from '$lib/Arrow.svelte';
 
@@ -46,7 +47,7 @@
   <meta property="og:description" content="A menu-bar time tracker for Mac. A note, a timer, a local record of your work." />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="receipts" />
-  <meta property="og:image" content="/images/week.webp" />
+  <meta property="og:image" content={`${base}/images/week.webp`} />
   <meta property="og:image:alt" content="Receipts weekly calendar with illustrative work sessions" />
   <meta name="twitter:card" content="summary_large_image" />
 </svelte:head>
@@ -126,16 +127,16 @@
         {#each views as view}
           <div id={`view-panel-${view.id}`} role="tabpanel" aria-labelledby={`view-tab-${view.id}`} tabindex="0" hidden={selected !== view.id}>
             <div class="aspect-[1.44]">
-              <img src={`/images/${view.id}.webp`} width="2880" height={view.height} alt={view.alt} loading="lazy" decoding="async" class="h-full w-full object-contain" />
+              <img src={`${base}/images/${view.id}.webp`} width="2880" height={view.height} alt={view.alt} loading="lazy" decoding="async" class="h-full w-full object-contain" />
             </div>
           </div>
         {/each}
       </div>
       <div class="mt-5 flex flex-wrap items-start justify-between gap-3 text-[12px] leading-6 text-ink-3">
         <p>{views.find((view) => view.id === selected)?.caption} <span class="block sm:inline">Actual app. Illustrative sessions.</span></p>
-        <a href={`/images/${selected}.webp`} target="_blank" rel="noreferrer" class="inline-flex min-h-8 items-center gap-2 underline decoration-rule hover:text-accent">Open full screenshot <Arrow class="h-3.5 w-3.5" /></a>
+        <a href={`${base}/images/${selected}.webp`} target="_blank" rel="noreferrer" class="inline-flex min-h-8 items-center gap-2 underline decoration-rule hover:text-accent">Open full screenshot <Arrow class="h-3.5 w-3.5" /></a>
       </div>
-      <noscript><p class="mt-3 text-sm text-ink-2">View screenshots: <a href="/images/log.webp" class="underline">Log</a>, <a href="/images/week.webp" class="underline">Week</a>, <a href="/images/stats.webp" class="underline">Stats</a>.</p></noscript>
+      <noscript><p class="mt-3 text-sm text-ink-2">View screenshots: <a href={`${base}/images/log.webp`} class="underline">Log</a>, <a href={`${base}/images/week.webp`} class="underline">Week</a>, <a href={`${base}/images/stats.webp`} class="underline">Stats</a>.</p></noscript>
     </section>
 </div>
 

@@ -31,7 +31,11 @@ playwright-cli -s=receipts-website run-code --filename=scripts/browser-smoke.js
 
 Restart `bun run preview` after rebuilding so its cached asset manifest matches the new output.
 
-The static output is `build/`. It includes real HTML, local fonts and optimized screenshots. It needs no server-side runtime. Deployment is intentionally not configured.
+The static output is `build/`. It includes real HTML, local fonts and optimized screenshots. It needs no server-side runtime.
+
+## Publish
+
+GitHub Actions deploys this site to [https://aungmyokyaw.github.io/receipts/](https://aungmyokyaw.github.io/receipts/) when website files change on `master`. The Pages build sets the `/receipts` base path; local development keeps root-relative paths. The workflow checks, tests and builds the site before deployment.
 
 ## Content boundaries
 

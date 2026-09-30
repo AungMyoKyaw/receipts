@@ -5,6 +5,9 @@ import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 export default {
   preprocess: vitePreprocess(),
   kit: {
-    adapter: adapter({ strict: true })
+    adapter: adapter({ strict: true }),
+    paths: {
+      base: process.env.GITHUB_PAGES === 'true' ? '/receipts' : ''
+    }
   }
 };
