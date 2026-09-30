@@ -1,211 +1,183 @@
-// Receipts — a personal stopwatch for self-audit.
-//
-// Architecture:
-// - Rust owns timer state (single source of truth, monotonic Instant).
-// - Frontend (any window) is a dumb display subscribed to `timer-tick` events.
-// - On stop, Rust returns the StoppedSession; frontend persists to SQLite via plugin-sql.
-
 mod state;
 
+use state::{AppState, Snapshot, DB_URL};
 use std::time::Duration;
-
-use serde::Serialize;
-use tauri::async_runtime::JoinHandle;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use tauri_plugin_positioner::{Position, WindowExt};
 
-use state::{format_hms, AppState, StoppedSession, TimerSnapshot};
+const WIDGET: &str = "widget";
+const MAIN: &str = "main";
+const TRAY: &str = "receipts";
 
-const WIDGET_LABEL: &str = "widget";
-const MAIN_LABEL: &str = "main";
-const TRAY_ID: &str = "main";
-
-// ---------------------------------------------------------------------------
-// Tick loop
-// ---------------------------------------------------------------------------
-
-fn spawn_tick_task(app: AppHandle) -> JoinHandle<()> {
-    tauri::async_runtime::spawn(async move {
-        // First tick fires immediately; skip it so elapsed reads 00:00:00 once.
-        let mut interval = tokio::time::interval(Duration::from_secs(1));
-        interval.tick().await;
-
-        loop {
-            interval.tick().await;
-
-            let state = app.state::<AppState>();
-            let elapsed_secs = {
-                let guard = state.timer.lock().unwrap();
-                match guard.as_ref() {
-                    Some(t) => t.started_at.elapsed().as_secs(),
-                    None => break, // timer was cleared; exit loop
-                }
-            };
-
-            let _ = app.emit("timer-tick", TickPayload { elapsed_secs });
-            update_tray_title(&app, elapsed_secs);
-        }
-
-        // Loop exited: timer was cleared. Clear tray title.
-        if let Some(tray) = app.tray_by_id(TRAY_ID) {
-            let _ = tray.set_title(Option::<String>::None);
-        }
-    })
-}
-
-#[derive(Serialize, Clone)]
-struct TickPayload {
-    elapsed_secs: u64,
-}
-
-// ---------------------------------------------------------------------------
-// Commands
-// ---------------------------------------------------------------------------
-
-#[tauri::command]
-fn get_timer_state(state: State<'_, AppState>) -> TimerSnapshot {
-    let guard = state.timer.lock().unwrap();
-    match guard.as_ref() {
-        Some(t) => TimerSnapshot {
-            running: true,
-            elapsed_secs: t.started_at.elapsed().as_secs(),
-            note: t.note.clone(),
-        },
-        None => TimerSnapshot {
-            running: false,
-            elapsed_secs: 0,
-            note: String::new(),
-        },
+fn publish(app: &AppHandle, snapshot: &Snapshot) {
+    update_tray(app, snapshot.started_at);
+    if let Err(error) = app.emit("receipts:changed", snapshot) {
+        eprintln!("Could not notify windows: {error}");
     }
 }
 
 #[tauri::command]
-fn start_timer(note: String, app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
-    let trimmed = note.trim();
-    if trimmed.is_empty() {
-        return Err("note is required".into());
+async fn get_snapshot(state: State<'_, AppState>) -> Result<Snapshot, String> {
+    state.snapshot().await
+}
+
+#[tauri::command]
+async fn start_timer(
+    note: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Snapshot, String> {
+    let snapshot = state.start(note, state::unix_now_ms()).await?;
+    publish(&app, &snapshot);
+    Ok(snapshot)
+}
+
+#[tauri::command]
+async fn stop_timer(
+    started_at: i64,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Snapshot, String> {
+    let snapshot = state.stop(started_at, state::unix_now_ms()).await?;
+    publish(&app, &snapshot);
+    Ok(snapshot)
+}
+
+#[tauri::command]
+async fn set_note(
+    note: String,
+    started_at: Option<i64>,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Snapshot, String> {
+    let snapshot = state.set_note(note, started_at).await?;
+    publish(&app, &snapshot);
+    Ok(snapshot)
+}
+
+#[tauri::command]
+fn hide_widget(app: AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window(WIDGET) {
+        window.hide().map_err(|e| e.to_string())?;
     }
-    if trimmed.chars().count() > 120 {
-        return Err("note too long (max 120 chars)".into());
-    }
-
-    {
-        let mut guard = state.timer.lock().unwrap();
-        if guard.is_some() {
-            return Err("timer already running".into());
-        }
-        *guard = Some(state::TimerState {
-            started_at: std::time::Instant::now(),
-            note: trimmed.to_string(),
-        });
-    }
-
-    // Spawn the tick task (replaces any previous handle).
-    if let Some(prev) = state.tick_handle.lock().unwrap().take() {
-        prev.abort();
-    }
-    let handle = spawn_tick_task(app.clone());
-    *state.tick_handle.lock().unwrap() = Some(handle);
-
-    // Show the widget window.
-    if let Some(w) = app.get_webview_window(WIDGET_LABEL) {
-        let _ = w.show();
-    }
-
-    // Set initial tray title.
-    update_tray_title(&app, 0);
-
-    let _ = app.emit(
-        "timer-started",
-        serde_json::json!({ "note": trimmed }),
-    );
-
     Ok(())
 }
 
 #[tauri::command]
-fn stop_timer(app: AppHandle, state: State<'_, AppState>) -> Result<StoppedSession, String> {
-    let session = {
-        let mut guard = state.timer.lock().unwrap();
-        let t = guard.take().ok_or_else(|| "timer not running".to_string())?;
-        let duration_secs = t.started_at.elapsed().as_secs() as i64;
-        StoppedSession {
-            started_unix_ms: state::unix_now_ms() - (duration_secs * 1000),
-            ended_unix_ms: state::unix_now_ms(),
-            duration_secs,
-            note: t.note,
+fn show_main(app: AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window(MAIN) {
+        window.unminimize().map_err(|e| e.to_string())?;
+        window.show().map_err(|e| e.to_string())?;
+        window.set_focus().map_err(|e| e.to_string())?;
+    }
+    hide_widget(app)
+}
+
+fn toggle_widget(app: &AppHandle) -> Result<(), tauri::Error> {
+    if let Some(window) = app.get_webview_window(WIDGET) {
+        if window.is_visible()? {
+            window.hide()?;
+        } else {
+            // Positioner receives tray events before this call. TopRight is a
+            // useful fallback when the keyboard shortcut is used before a click.
+            if window.move_window(Position::TrayBottomCenter).is_err() {
+                let _ = window.move_window(Position::TopRight);
+            }
+            window.show()?;
+            window.set_focus()?;
         }
+    }
+    Ok(())
+}
+
+fn update_tray(app: &AppHandle, started_at: Option<i64>) {
+    if let Some(tray) = app.tray_by_id(TRAY) {
+        let title = started_at.map(|start| state::format_hms(state::unix_now_ms() - start));
+        let _ = tray.set_title(title.as_deref());
+        let tooltip = if started_at.is_some() {
+            "Receipts — recording"
+        } else {
+            "Receipts — start a session"
+        };
+        let _ = tray.set_tooltip(Some(tooltip));
+    }
+}
+
+/// A monochrome receipt glyph for macOS template rendering. The shape
+/// mirrors the bundle icon (a slim paper timecard with a stamped proofing
+/// dot at the top-right) but is reduced to alpha so macOS can re-tint it
+/// for light and dark menu bars.
+fn tray_image() -> tauri::image::Image<'static> {
+    // 44x44 (Retina template size). Generated glyph: receipt outline with
+    // three perforation rows and a single record dot.
+    const W: usize = 44;
+    const H: usize = 44;
+    let mut rgba = vec![0_u8; W * H * 4];
+
+    // Receipt card body — rounded rectangle inset from the edges.
+    let x0 = 8_usize;
+    let x1 = 35_usize;
+    let y0 = 6_usize;
+    let y1 = 38_usize;
+    let r = 3_usize;
+
+    let mut fill = |x: usize, y: usize, a: u8| {
+        rgba[(y * W + x) * 4 + 3] = a;
     };
 
-    // Abort the tick task.
-    if let Some(h) = state.tick_handle.lock().unwrap().take() {
-        h.abort();
-    }
-
-    // Hide widget, clear tray title.
-    if let Some(w) = app.get_webview_window(WIDGET_LABEL) {
-        let _ = w.hide();
-    }
-    if let Some(tray) = app.tray_by_id(TRAY_ID) {
-        let _ = tray.set_title(Option::<String>::None);
-    }
-
-    let _ = app.emit("timer-stopped", &session);
-    Ok(session)
-}
-
-#[tauri::command]
-fn show_widget(app: AppHandle) {
-    if let Some(w) = app.get_webview_window(WIDGET_LABEL) {
-        let _ = w.show();
-    }
-}
-
-#[tauri::command]
-fn hide_widget(app: AppHandle) {
-    if let Some(w) = app.get_webview_window(WIDGET_LABEL) {
-        let _ = w.hide();
-    }
-}
-
-#[tauri::command]
-fn toggle_widget(app: AppHandle) {
-    if let Some(w) = app.get_webview_window(WIDGET_LABEL) {
-        match w.is_visible() {
-            Ok(true) => {
-                let _ = w.hide();
+    // Card outline + corner radius. Trace the rectangle perimeter only —
+    // the interior is left transparent so the glyph stays legible at small
+    // sizes in light and dark menu bars.
+    for y in y0..=y1 {
+        for x in x0..=x1 {
+            let on_edge = x == x0 || x == x1 || y == y0 || y == y1;
+            let on_corner = (x == x0 || x == x1) && (y < y0 + r || y > y1 - r)
+                || (y == y0 || y == y1) && (x < x0 + r || x > x1 - r);
+            if on_edge && !on_corner {
+                fill(x, y, 255);
             }
-            _ => {
-                let _ = w.show();
+            let corner_radius = (x as i32 - x0 as i32).pow(2) + (y as i32 - y0 as i32).pow(2)
+                <= (r as i32).pow(2)
+                || (x as i32 - x1 as i32).pow(2) + (y as i32 - y0 as i32).pow(2)
+                    <= (r as i32).pow(2)
+                || (x as i32 - x0 as i32).pow(2) + (y as i32 - y1 as i32).pow(2)
+                    <= (r as i32).pow(2)
+                || (x as i32 - x1 as i32).pow(2) + (y as i32 - y1 as i32).pow(2)
+                    <= (r as i32).pow(2);
+            if corner_radius && (x == x0 || x == x1 || y == y0 || y == y1) {
+                fill(x, y, 255);
             }
         }
     }
-}
 
-#[tauri::command]
-fn show_main(app: AppHandle) {
-    if let Some(w) = app.get_webview_window(MAIN_LABEL) {
-        let _ = w.show();
-        let _ = w.unminimize();
-        let _ = w.set_focus();
+    // Inner content lines (note rows).
+    for &(y, x_start, x_end) in &[(15_usize, 12_usize, 31_usize), (20, 12, 28), (25, 12, 30)] {
+        for x in x_start..=x_end {
+            fill(x, y, 255);
+        }
     }
-}
 
-// ---------------------------------------------------------------------------
-// Tray helpers
-// ---------------------------------------------------------------------------
-
-fn update_tray_title(app: &AppHandle, elapsed_secs: u64) {
-    if let Some(tray) = app.tray_by_id(TRAY_ID) {
-        let title = format_hms(elapsed_secs);
-        let _ = tray.set_title(Some(title.as_str()));
+    // Perforated bottom edge — alternating dashes.
+    for x in (x0 + 1..x1).step_by(2) {
+        fill(x, y1 + 2, 255);
     }
-}
 
-// ---------------------------------------------------------------------------
-// Setup
-// ---------------------------------------------------------------------------
+    // Recording dot — sits top-right, fully opaque so macOS keeps it
+    // prominent when the template is tinted to black or white.
+    for y in 30..36 {
+        for x in 30..36 {
+            let dx = x as i32 - 32;
+            let dy = y as i32 - 32;
+            if dx * dx + dy * dy <= 3 * 3 {
+                fill(x, y, 255);
+            }
+        }
+    }
+
+    tauri::image::Image::new_owned(rgba, W as u32, H as u32)
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -216,33 +188,30 @@ pub fn run() {
         .plugin(tauri_plugin_positioner::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
-                .with_handler(|app, shortcut, event| {
-                    use tauri_plugin_global_shortcut::{ShortcutState, Shortcut};
-                    let target = Shortcut::new(
-                        Some(tauri_plugin_global_shortcut::Modifiers::SUPER | tauri_plugin_global_shortcut::Modifiers::SHIFT),
-                        tauri_plugin_global_shortcut::Code::Space,
-                    );
-                    if event.state() == ShortcutState::Pressed && shortcut == &target {
-                        let app = app.clone();
-                        tauri::async_runtime::spawn(async move {
-                            toggle_widget(app);
-                        });
+                .with_handler(|app, _, event| {
+                    if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                        if let Err(error) = toggle_widget(app) {
+                            eprintln!("Could not open popup: {error}");
+                        }
                     }
                 })
                 .build(),
         )
-        .manage(AppState::new())
         .setup(|app| {
-            // -- Register global shortcut --
-            use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
-            let shortcut = Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::Space);
-            let _ = app.global_shortcut().register(shortcut);
+            let pool = tauri::async_runtime::block_on(async {
+                let instances = app.state::<tauri_plugin_sql::DbInstances>();
+                let pools = instances.0.read().await;
+                match pools.get(DB_URL) {
+                    Some(tauri_plugin_sql::DbPool::Sqlite(pool)) => Ok(pool.clone()),
+                    _ => Err("Receipts database was not preloaded"),
+                }
+            })?;
+            tauri::async_runtime::block_on(sqlx::raw_sql(state::SCHEMA).execute(&pool))?;
+            app.manage(AppState::new(pool));
 
-            // -- Build widget window (frameless, transparent, always-on-top) --
-            let widget = WebviewWindowBuilder::new(app, WIDGET_LABEL, WebviewUrl::App("/".into()))
-                .title("Receipts")
-                .inner_size(220.0, 120.0)
-                .min_inner_size(220.0, 120.0)
+            WebviewWindowBuilder::new(app, WIDGET, WebviewUrl::App("/?surface=widget".into()))
+                .title("Receipts — timer")
+                .inner_size(320.0, 176.0)
                 .resizable(false)
                 .decorations(false)
                 .transparent(true)
@@ -251,54 +220,78 @@ pub fn run() {
                 .focused(false)
                 .visible(false)
                 .build()?;
-            let _ = widget;
 
-            // -- Build tray icon with menu --
-            let toggle_i = MenuItem::with_id(app, "toggle", "Show / Hide Widget", true, None::<&str>)?;
-            let show_main_i = MenuItem::with_id(app, "show_main", "Open Log", true, None::<&str>)?;
-            let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&toggle_i, &show_main_i, &quit_i])?;
-
-            let _tray = TrayIconBuilder::with_id(TRAY_ID)
-                .icon(app.default_window_icon().cloned().unwrap())
-                .tooltip("Receipts")
+            let toggle = MenuItem::with_id(app, "toggle", "Show / Hide Timer", true, None::<&str>)?;
+            let log = MenuItem::with_id(app, "log", "Open Log", true, None::<&str>)?;
+            let quit = MenuItem::with_id(app, "quit", "Quit Receipts", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&toggle, &log, &quit])?;
+            TrayIconBuilder::with_id(TRAY)
+                .icon(tray_image())
+                .icon_as_template(true)
+                .tooltip("Receipts — start a session")
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id().as_ref() {
                     "toggle" => {
-                        toggle_widget(app.clone());
+                        let _ = toggle_widget(app);
                     }
-                    "show_main" => {
-                        show_main(app.clone());
+                    "log" => {
+                        let _ = show_main(app.clone());
                     }
-                    "quit" => {
-                        app.exit(0);
-                    }
+                    "quit" => app.exit(0),
                     _ => {}
                 })
                 .on_tray_icon_event(|tray, event| {
+                    tauri_plugin_positioner::on_tray_event(tray.app_handle(), &event);
                     if let TrayIconEvent::Click {
                         button: MouseButton::Left,
                         button_state: MouseButtonState::Up,
                         ..
                     } = event
                     {
-                        toggle_widget(tray.app_handle().clone());
+                        let _ = toggle_widget(tray.app_handle());
                     }
                 })
                 .build(app)?;
 
+            use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
+            let shortcut = Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::Space);
+            if let Err(error) = app.global_shortcut().register(shortcut) {
+                eprintln!("Shortcut unavailable; use the menu-bar icon: {error}");
+            }
+
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                let mut interval = tokio::time::interval(Duration::from_secs(1));
+                loop {
+                    interval.tick().await;
+                    let state = handle.state::<AppState>();
+                    match state.started_at().await {
+                        Ok(started_at) => update_tray(&handle, started_at),
+                        Err(error) => eprintln!("Could not read timer: {error}"),
+                    }
+                }
+            });
             Ok(())
         })
+        .on_window_event(|window, event| match event {
+            WindowEvent::CloseRequested { api, .. } => {
+                api.prevent_close();
+                let _ = window.hide();
+            }
+            WindowEvent::Focused(false) if window.label() == WIDGET => {
+                let _ = window.hide();
+            }
+            _ => {}
+        })
         .invoke_handler(tauri::generate_handler![
-            get_timer_state,
+            get_snapshot,
             start_timer,
             stop_timer,
-            show_widget,
+            set_note,
             hide_widget,
-            toggle_widget,
-            show_main,
+            show_main
         ])
         .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .expect("Could not launch Receipts");
 }

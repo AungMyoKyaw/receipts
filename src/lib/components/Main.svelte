@@ -1,148 +1,69 @@
 <script lang="ts">
-  import { onMount } from "svelte";
-  import { listSessions, getStats, type Session, type Stats } from "$lib/db";
-  import { onTimerStopped, type StoppedSession } from "$lib/timer";
+  import { receipts } from "$lib/receipts.svelte";
+  import { dateStamp, entries, formatHM, statistics } from "$lib/time";
+  import TimerControls from "./TimerControls.svelte";
+  import Notice from "./Notice.svelte";
+  import SessionLog from "./SessionLog.svelte";
+  import WeekCalendar from "./WeekCalendar.svelte";
+  import Statistics from "./Statistics.svelte";
 
-  let tab = $state<"log" | "stats">("log");
-  let sessions = $state<Session[]>([]);
-  let stats = $state<Stats | null>(null);
-  let loading = $state(true);
+  const tabs = ['log', 'week', 'stats'] as const;
+  type Tab = typeof tabs[number];
+  let tab = $state<Tab>('log');
+  const rows = $derived(entries(receipts.snapshot, receipts.now));
+  const stats = $derived(statistics(rows, receipts.now));
 
-  async function refresh() {
-    loading = true;
-    try {
-      sessions = await listSessions(200, 0);
-      stats = await getStats();
-    } finally {
-      loading = false;
-    }
-  }
-
-  onMount(() => {
-    let unlisten: (() => void) | undefined;
-    (async () => {
-      await refresh();
-      unlisten = await onTimerStopped(async (_s: StoppedSession) => {
-        await refresh();
-      });
-    })();
-    return () => {
-      unlisten?.();
-    };
-  });
-
-  function fmtDuration(secs: number): string {
-    const h = Math.floor(secs / 3600);
-    const m = Math.floor((secs % 3600) / 60);
-    if (h > 0) return `${h}h ${m}m`;
-    if (m > 0) return `${m}m`;
-    return `${secs}s`;
-  }
-
-  function fmtTimestamp(ms: number): string {
-    const d = new Date(ms);
-    const today = new Date();
-    const sameDay =
-      d.getFullYear() === today.getFullYear() &&
-      d.getMonth() === today.getMonth() &&
-      d.getDate() === today.getDate();
-    const time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
-    if (sameDay) return time;
-    const date = d.toLocaleDateString([], { month: "short", day: "numeric" });
-    return `${date} ${time}`;
-  }
-
-  function fmtTotal(secs: number): string {
-    const h = Math.floor(secs / 3600);
-    const m = Math.floor((secs % 3600) / 60);
-    const s = secs % 60;
-    if (h > 0) return `${h}h ${m}m`;
-    if (m > 0) return `${m}m ${s}s`;
-    return `${s}s`;
-  }
-
-  function maxDaily(secs: number[]): number {
-    return Math.max(1, ...secs);
+  function navigate(event: KeyboardEvent) {
+    const index = tabs.indexOf(tab);
+    let next = index;
+    if (event.key === 'ArrowRight') next = (index + 1) % tabs.length;
+    else if (event.key === 'ArrowLeft') next = (index + tabs.length - 1) % tabs.length;
+    else if (event.key === 'Home') next = 0;
+    else if (event.key === 'End') next = tabs.length - 1;
+    else return;
+    event.preventDefault();
+    tab = tabs[next];
+    document.getElementById(`tab-${tab}`)?.focus();
   }
 </script>
 
-<div class="min-h-screen bg-neutral-950 text-neutral-100 p-6">
-  <header class="mb-6 flex items-baseline justify-between">
-    <h1 class="text-2xl font-semibold tracking-tight">Receipts</h1>
-    {#if stats}
-      <div class="text-xs text-neutral-500 font-mono">
-        today: <span class="text-neutral-300">{fmtTotal(stats.total_secs_today)}</span>
-        · week: <span class="text-neutral-300">{fmtTotal(stats.total_secs_week)}</span>
-      </div>
-    {/if}
+<main class="crops min-h-screen w-full overflow-hidden bg-paper-2">
+  <span class="crop tl" aria-hidden="true"></span><span class="crop tr" aria-hidden="true"></span><span class="crop bl" aria-hidden="true"></span><span class="crop br" aria-hidden="true"></span>
+  <header class="p-7 pb-5 max-[560px]:px-5">
+    <div class="mb-3 flex flex-wrap items-baseline justify-between gap-4">
+      <h1 class="display text-[30px] font-normal leading-none tracking-[-0.03em] text-ink">receipts<span class="text-accent">.</span></h1>
+      <time datetime={new Date(receipts.now).toISOString()} class="stamp mono inline-block whitespace-nowrap border border-ink-3 bg-paper-2 px-2 py-1 text-[10px] uppercase tracking-[0.22em] text-ink-2">{dateStamp(receipts.now)}</time>
+    </div>
+    <div class="mono flex flex-wrap items-center gap-3 text-[11px] uppercase tracking-[0.15em] text-ink-3" aria-label="Session totals">
+      <span>today <strong class="ml-1 font-semibold text-ink tabular">{formatHM(stats.today)}</strong></span>
+      <span aria-hidden="true">·</span>
+      <span>week <strong class="ml-1 font-semibold text-ink tabular">{formatHM(stats.week)}</strong></span>
+      <span aria-hidden="true">·</span>
+      <span><strong class="font-semibold text-ink tabular">{stats.weekCount}</strong> session{stats.weekCount === 1 ? '' : 's'}</span>
+    </div>
   </header>
-
-  <!-- Tabs -->
-  <nav class="mb-4 flex gap-1 border-b border-neutral-800">
-    {#each [{ k: "log", label: "Log" }, { k: "stats", label: "Stats" }] as t}
-      <button
-        onclick={() => (tab = t.k as "log" | "stats")}
-        class="px-3 py-2 text-sm {tab === t.k
-          ? 'text-neutral-100 border-b border-neutral-100 -mb-px'
-          : 'text-neutral-500 hover:text-neutral-300'}"
-      >
-        {t.label}
-      </button>
+  <div class="perf mx-7 max-[560px]:mx-5" aria-hidden="true"></div>
+  <TimerControls />
+  <Notice />
+  <div class="perf mx-7 max-[560px]:mx-5" aria-hidden="true"></div>
+  <div class="flex gap-1 px-7 pt-5 max-[560px]:px-5" role="tablist" aria-label="Sessions">
+    {#each tabs as item}
+      <button id={`tab-${item}`} role="tab" aria-selected={tab === item} aria-controls={`panel-${item}`} tabindex={tab === item ? 0 : -1} onkeydown={navigate} onclick={() => tab = item}
+        class="mono border-b-2 px-3.5 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] {tab === item ? 'border-accent bg-paper text-ink' : 'border-transparent text-ink-3 hover:text-ink-2'}">{item}</button>
     {/each}
-  </nav>
-
-  {#if loading}
-    <div class="text-neutral-600 text-sm">loading…</div>
-  {:else if tab === "log"}
-    {#if sessions.length === 0}
-      <div class="text-neutral-600 text-sm py-12 text-center">
-        no sessions yet. start one with <span class="font-mono text-neutral-400">Cmd+Shift+Space</span>.
-      </div>
-    {:else}
-      <ul class="divide-y divide-neutral-900">
-        {#each sessions as s (s.id)}
-          <li class="grid grid-cols-[80px_80px_1fr] gap-3 items-baseline py-2 text-sm">
-            <span class="font-mono text-xs text-neutral-500">{fmtTimestamp(s.started_at)}</span>
-            <span class="font-mono text-xs text-neutral-300 tabular-nums">
-              {fmtDuration(s.duration_secs)}
-            </span>
-            <span class="text-neutral-200 truncate" title={s.note}>{s.note}</span>
-          </li>
-        {/each}
-      </ul>
+  </div>
+  <div class="px-7 pt-2 pb-7 max-[560px]:px-5">
+    {#if !receipts.ready}
+      <p class="py-16 text-center mono text-[12px] text-ink-3" role="status">{receipts.error ? 'Local data unavailable.' : 'Opening your log…'}</p>
     {/if}
-  {:else if tab === "stats" && stats}
-    <div class="space-y-6">
-      <div class="grid grid-cols-2 gap-3">
-        <div class="rounded-md border border-neutral-800 bg-neutral-900/40 p-4">
-          <div class="text-xs text-neutral-500 mb-1">Today</div>
-          <div class="text-2xl font-light tabular-nums">{fmtTotal(stats.total_secs_today)}</div>
-          <div class="text-xs text-neutral-600 mt-1">{stats.sessions_today} session{stats.sessions_today === 1 ? "" : "s"}</div>
-        </div>
-        <div class="rounded-md border border-neutral-800 bg-neutral-900/40 p-4">
-          <div class="text-xs text-neutral-500 mb-1">Last 7 days</div>
-          <div class="text-2xl font-light tabular-nums">{fmtTotal(stats.total_secs_week)}</div>
-          <div class="text-xs text-neutral-600 mt-1">{stats.sessions_week} session{stats.sessions_week === 1 ? "" : "s"}</div>
-        </div>
-      </div>
-
-      <div class="rounded-md border border-neutral-800 bg-neutral-900/40 p-4">
-        <div class="text-xs text-neutral-500 mb-3">Daily minutes (last 7 days)</div>
-        {#if stats.daily_secs.length === 0}
-          <div class="text-neutral-600 text-sm">no data</div>
-        {:else}
-          {@const secs = stats.daily_secs.map((d) => d.secs)}
-          {@const max = maxDaily(secs)}
-          <div class="flex items-end gap-1 h-24">
-            {#each stats.daily_secs as d}
-              <div class="flex-1 flex flex-col items-center gap-1">
-                <div class="w-full bg-neutral-700 rounded-sm" style="height: {(d.secs / max) * 100}%; min-height: 2px"></div>
-                <div class="text-[10px] text-neutral-600 font-mono">{d.day.slice(5)}</div>
-              </div>
-            {/each}
-          </div>
+    {#each tabs as item}
+      <div id={`panel-${item}`} role="tabpanel" aria-labelledby={`tab-${item}`} hidden={tab !== item} tabindex="0">
+        {#if receipts.ready && tab === item}
+          {#if item === 'log'}<SessionLog {rows} now={receipts.now} />
+          {:else if item === 'week'}<WeekCalendar {rows} now={receipts.now} />
+          {:else}<Statistics {stats} />{/if}
         {/if}
       </div>
-    </div>
-  {/if}
-</div>
+    {/each}
+  </div>
+</main>

@@ -1,55 +1,33 @@
-import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { invoke, isTauri } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { mutatePreview, PREVIEW_KEY, readPreview } from "./db";
+import type { Action, Snapshot } from "./types";
 
-export type TimerSnapshot = {
-  running: boolean;
-  elapsed_secs: number;
-  note: string;
-};
-
-export type StoppedSession = {
-  started_unix_ms: number;
-  ended_unix_ms: number;
-  duration_secs: number;
-  note: string;
-};
-
-export async function getTimerState(): Promise<TimerSnapshot> {
-  return invoke<TimerSnapshot>("get_timer_state");
+export const native = () => isTauri();
+export async function getSnapshot(): Promise<Snapshot> {
+  return native() ? invoke<Snapshot>("get_snapshot") : readPreview();
 }
-
-export async function startTimer(note: string): Promise<void> {
-  await invoke("start_timer", { note });
+export async function mutate(action: Action): Promise<Snapshot> {
+  if (!native()) return mutatePreview(action);
+  if (action.kind === "start") return invoke("start_timer", { note: action.note });
+  if (action.kind === "stop") return invoke("stop_timer", { startedAt: action.startedAt });
+  return invoke("set_note", { note: action.note, startedAt: action.startedAt });
 }
-
-export async function stopTimer(): Promise<StoppedSession> {
-  return invoke<StoppedSession>("stop_timer");
+export async function subscribe(changed: (snapshot: Snapshot) => void, failed: (error: unknown) => void): Promise<() => void> {
+  if (native()) return listen<Snapshot>("receipts:changed", event => changed(event.payload));
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === PREVIEW_KEY) {
+      try { changed(readPreview()); } catch (error) { failed(error); }
+    }
+  };
+  window.addEventListener("storage", onStorage);
+  return () => window.removeEventListener("storage", onStorage);
 }
-
-export async function showWidget(): Promise<void> {
-  await invoke("show_widget");
-}
-
-export async function hideWidget(): Promise<void> {
-  await invoke("hide_widget");
-}
-
-export async function toggleWidget(): Promise<void> {
-  await invoke("toggle_widget");
-}
-
 export async function showMain(): Promise<void> {
-  await invoke("show_main");
+  if (native()) await invoke("show_main");
+  else window.location.assign("/");
 }
-
-export function onTimerTick(cb: (elapsed_secs: number) => void): Promise<UnlistenFn> {
-  return listen<{ elapsed_secs: number }>("timer-tick", (e) => cb(e.payload.elapsed_secs));
-}
-
-export function onTimerStarted(cb: (note: string) => void): Promise<UnlistenFn> {
-  return listen<{ note: string }>("timer-started", (e) => cb(e.payload.note));
-}
-
-export function onTimerStopped(cb: (s: StoppedSession) => void): Promise<UnlistenFn> {
-  return listen<StoppedSession>("timer-stopped", (e) => cb(e.payload));
+export async function hideWidget(): Promise<void> {
+  if (native()) await invoke("hide_widget");
+  else window.location.assign("/");
 }

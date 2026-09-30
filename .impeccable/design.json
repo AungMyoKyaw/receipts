@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-29T18:46:00Z",
+  "title": "Receipts — Galley Proof",
+  "extensions": {
+    "typographyMeta": {
+      "timer": { "displayName": "Proof numerals", "purpose": "Elapsed time, optical size 144, tabular figures." },
+      "label": { "displayName": "Measured labels", "purpose": "Timestamps, IDs, dates and uppercase UI labels." }
+    },
+    "shadows": [],
+    "motion": [
+      { "name": "recording", "value": "1.4s ease-in-out infinite", "purpose": "Recording dot only; disabled with reduced motion." },
+      { "name": "control", "value": "80ms ease", "purpose": "Press translation only. State colors update without animation." }
+    ],
+    "breakpoints": [{ "name": "compact-window", "value": "560px" }]
+  },
+  "components": [
+    {
+      "name": "Start", "kind": "button", "refersTo": "button-start", "description": "Begin a named session.",
+      "html": "<button class=\"ds-start\">Start</button>",
+      "css": ".ds-start{background:#0c0a07;color:#f3eee2;border:0;border-radius:8px;padding:10px 16px;font:600 14px 'Inter Variable',sans-serif;cursor:pointer;transition:transform 80ms ease}.ds-start:hover{background:#3d3a35}.ds-start:focus-visible{outline:2px solid #c8201a;outline-offset:3px}.ds-start:active{transform:translateY(.5px)}"
+    },
+    {
+      "name": "Stop", "kind": "button", "refersTo": "button-stop", "description": "Save the current recording.",
+      "html": "<button class=\"ds-stop\">Stop</button>",
+      "css": ".ds-stop{background:#c8201a;color:#f3eee2;border:0;border-radius:8px;padding:10px 16px;font:600 14px 'Inter Variable',sans-serif;cursor:pointer;transition:transform 80ms ease}.ds-stop:hover{background:#8a1410}.ds-stop:focus-visible{outline:2px solid #c8201a;outline-offset:3px}.ds-stop:active{transform:translateY(.5px)}"
+    },
+    {
+      "name": "Note", "kind": "input", "refersTo": "note", "description": "The note carries the work.",
+      "html": "<input class=\"ds-note\" aria-label=\"What are you working on\" placeholder=\"what are you doing?\" maxlength=\"120\">",
+      "css": ".ds-note{background:#f3eee2;color:#0c0a07;border:1px solid #b8ad94;border-radius:6px;padding:8px 12px;font:13px 'JetBrains Mono Variable',monospace;caret-color:#c8201a}.ds-note::placeholder{color:#5e5749}.ds-note:focus-visible{outline:none;border-color:#c8201a;box-shadow:0 0 0 2px #c8201a26}"
+    },
+    {
+      "name": "Tabs", "kind": "nav", "refersTo": "tab-active", "description": "Log, week and stats share one underline language.",
+      "html": "<div class=\"ds-tabs\"><button aria-current=\"page\">log</button><button>week</button><button>stats</button></div>",
+      "css": ".ds-tabs{display:flex;gap:4px}.ds-tabs button{background:transparent;color:#5e5749;border:0;border-bottom:2px solid transparent;padding:8px 14px;font:600 11px 'JetBrains Mono Variable',monospace;letter-spacing:.18em;text-transform:uppercase;cursor:pointer}.ds-tabs button[aria-current]{background:#f3eee2;color:#0c0a07;border-bottom-color:#c8201a}.ds-tabs button:hover{color:#3d3a35}.ds-tabs button:focus-visible{outline:2px solid #c8201a;outline-offset:3px}"
+    },
+    {
+      "name": "Perforation", "kind": "custom", "description": "A repeating tear line between the header, timer and log.",
+      "html": "<div class=\"ds-perf\" aria-hidden=\"true\"></div>",
+      "css": ".ds-perf{height:5px;background-image:radial-gradient(circle at 2px 50%,#b8ad94 .9px,transparent 1.3px),linear-gradient(90deg,#b8ad94 1.4px,transparent 1.4px);background-size:8px 5px,8px 5px;background-position:0 50%,4px 50%;background-repeat:repeat-x}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Galley Proof",
+    "overview": "The visual authority is prototype/index.html and its v9 README: a print-shop test sheet, not a financial dashboard.",
+    "keyCharacteristics": ["cream proof paper", "carbon ink", "proofing red", "large serif time", "compact measured labels", "perforated rules", "a stamped date"],
+    "rules": [
+      { "name": "The State Ink Rule", "body": "Preserve the distinction between live red and saved green, with accompanying text rather than color alone.", "section": "colors" },
+      { "name": "The Three Roles Rule", "body": "Do not replace the display face with the label face. All duration numerals use tabular figures.", "section": "typography" }
+    ],
+    "dos": ["Do preserve the prototype's palette and three type roles.", "Do expose keyboard focus without doubling field outlines.", "Do keep off-hours recordings visible above the calendar."],
+    "donts": ["Don't seed production data with prototype examples.", "Don't invent a dark theme or replace paper with a generic dashboard shell.", "Don't require a network connection to render typography."]
+  }
+}

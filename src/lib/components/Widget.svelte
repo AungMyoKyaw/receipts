@@ -1,156 +1,52 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { getCurrentWindow } from "@tauri-apps/api/window";
-  import {
-    getTimerState,
-    startTimer,
-    stopTimer,
-    onTimerTick,
-    onTimerStopped,
-    type StoppedSession,
-  } from "$lib/timer";
-  import { insertSession } from "$lib/db";
+  import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
+  import { receipts, reportError } from "$lib/receipts.svelte";
+  import { hideWidget, native, showMain } from "$lib/timer";
+  import TimerControls from "./TimerControls.svelte";
+  import Notice from "./Notice.svelte";
 
-  let note = $state("");
-  let elapsed = $state(0);
-  let running = $state(false);
-  let busy = $state(false);
-  let error = $state<string | null>(null);
+  let panel: HTMLElement;
+  const running = $derived(receipts.snapshot.running);
+  const saved = $derived(receipts.savedUntil > receipts.now);
 
-  async function refresh() {
-    const s = await getTimerState();
-    running = s.running;
-    elapsed = s.elapsed_secs;
-    if (s.note) note = s.note;
+  function focusNote() { panel?.querySelector<HTMLInputElement>("input")?.focus(); }
+  function handleKey(event: KeyboardEvent) {
+    if (event.key === "Escape") { event.preventDefault(); void hideWidget().catch(reportError); }
+    if (event.key !== "Tab") return;
+    const controls = [...panel.querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled), a[href]")];
+    const first = controls[0];
+    const last = controls.at(-1);
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
   }
 
   onMount(() => {
-    let unTick: (() => void) | undefined;
-    let unStopped: (() => void) | undefined;
-    (async () => {
-      await refresh();
-      unTick = await onTimerTick((e) => {
-        elapsed = e;
-        running = true;
-      });
-      unStopped = await onTimerStopped(async (s: StoppedSession) => {
-        try {
-          await insertSession({
-            started_at: s.started_unix_ms,
-            ended_at: s.ended_unix_ms,
-            duration_secs: s.duration_secs,
-            note: s.note,
-          });
-        } catch (err) {
-          console.error("insertSession failed", err);
-          error = String(err);
-        }
-        running = false;
-        elapsed = 0;
-        note = "";
-      });
-    })();
-    return () => {
-      unTick?.();
-      unStopped?.();
-    };
+    window.addEventListener("focus", focusNote);
+    const observer = new ResizeObserver(() => {
+      if (native()) void getCurrentWindow().setSize(new LogicalSize(320, Math.ceil(panel.getBoundingClientRect().height))).catch(reportError);
+    });
+    observer.observe(panel);
+    return () => { observer.disconnect(); window.removeEventListener("focus", focusNote); };
   });
-
-  async function start() {
-    if (!note.trim() || busy) return;
-    busy = true;
-    error = null;
-    try {
-      await startTimer(note.trim());
-      running = true;
-      elapsed = 0;
-    } catch (e) {
-      error = String(e);
-    } finally {
-      busy = false;
-    }
-  }
-
-  async function stop() {
-    if (busy) return;
-    busy = true;
-    try {
-      await stopTimer();
-      // timer-stopped handler will reset state
-    } catch (e) {
-      error = String(e);
-    } finally {
-      busy = false;
-    }
-  }
-
-  async function hide() {
-    await getCurrentWindow().hide();
-  }
-
-  function fmt(secs: number): string {
-    const h = Math.floor(secs / 3600);
-    const m = Math.floor((secs % 3600) / 60);
-    const s = secs % 60;
-    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-  }
+  $effect(() => { if (receipts.ready) focusNote(); });
 </script>
 
-<div
-  data-tauri-drag-region
-  class="flex h-screen w-screen flex-col rounded-xl border border-white/10 bg-black/70 text-neutral-100 backdrop-blur-md shadow-2xl select-none"
->
-  <!-- Top bar: drag region + close -->
-  <div data-tauri-drag-region class="flex items-center justify-end px-2 pt-1.5">
-    <button
-      onclick={hide}
-      class="text-neutral-500 hover:text-neutral-200 text-xs px-1"
-      title="Hide"
-    >
-      ✕
-    </button>
-  </div>
-
-  <!-- Time display -->
-  <div class="flex flex-1 items-center justify-center px-3 -mt-2">
-    <div class="font-mono text-4xl font-light tabular-nums tracking-tight">
-      {fmt(elapsed)}
+<svelte:window onkeydown={handleKey} />
+<main bind:this={panel} aria-label="Receipts timer" class="flex min-h-[176px] w-full flex-col overflow-hidden rounded-xl border border-rule bg-paper-2">
+  <header class="flex items-center justify-between px-4 pt-3.5 pb-2">
+    <div class="flex items-center gap-2">
+      <span class="crosshair text-ink-3" aria-hidden="true"></span>
+      {#if running}<span class="h-1.5 w-1.5 rounded-full bg-accent pulse-rec" aria-hidden="true"></span>{/if}
+      <span class="mono text-[10px] uppercase tracking-[0.22em] font-semibold {running ? 'text-accent' : saved ? 'text-positive' : 'text-ink-3'}">
+        {!receipts.ready ? 'loading' : running ? 'rec' : saved ? 'saved' : 'idle'}
+      </span>
     </div>
+    <button onclick={() => void showMain().catch(reportError)} class="mono text-[10px] uppercase tracking-[0.22em] text-ink-2 hover:text-ink">open log <span aria-hidden="true">→</span></button>
+  </header>
+  <TimerControls compact />
+  <Notice />
+  <div class="mt-auto flex h-[3px] w-full shrink-0" aria-hidden="true">
+    <span class="flex-1 bg-accent"></span><span class="flex-1 bg-positive"></span><span class="flex-1 bg-ink"></span><span class="flex-1 bg-rule"></span>
   </div>
-
-  <!-- Note + button -->
-  <div class="px-3 pb-3 flex flex-col gap-2">
-    {#if running}
-      <div class="text-xs text-neutral-500 truncate" title={note}>
-        {note || "—"}
-      </div>
-      <button
-        onclick={stop}
-        disabled={busy}
-        class="w-full rounded-md bg-neutral-100 px-3 py-1.5 text-sm font-medium text-neutral-900 hover:bg-white disabled:opacity-50"
-      >
-        Stop
-      </button>
-    {:else}
-      <input
-        type="text"
-        bind:value={note}
-        maxlength="120"
-        placeholder="what are you doing?"
-        class="w-full rounded-md bg-white/5 border border-white/10 px-2 py-1 text-xs text-neutral-100 placeholder:text-neutral-600 focus:outline-none focus:border-white/30"
-        onkeydown={(e) => e.key === "Enter" && start()}
-      />
-      <button
-        onclick={start}
-        disabled={!note.trim() || busy}
-        class="w-full rounded-md bg-neutral-100 px-3 py-1.5 text-sm font-medium text-neutral-900 hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed"
-      >
-        Start
-      </button>
-    {/if}
-
-    {#if error}
-      <div class="text-xs text-red-400 truncate" title={error}>{error}</div>
-    {/if}
-  </div>
-</div>
+</main>

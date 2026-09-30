@@ -23,10 +23,10 @@ A single-purpose menu-bar time tracker with one primary surface (the popup) and 
 Runs as a menu-bar app on macOS. The popup is invoked by clicking the menu-bar icon. The main window opens via the popup's "open log" link and lives as a regular Tauri window. Sessions are stored locally (SQLite via Tauri, `localStorage` in the prototype). Background clock ticks survive reload because timer state is `{ startedAt, note }` and elapsed is computed on read.
 
 ## Capabilities and Constraints
-- Single running session at a time (starting a new one stops the current).
+- Single running session at a time. A duplicate Start is rejected; Stop commits the active session before another can begin.
 - Session shape: `{ id, startedAt, endedAt, durationMs, note }`.
 - Live stats recompute from sessions + currently-running session.
-- Popup and main window share state via a single store; updates propagate immediately and across tabs.
+- Popup and main window share committed Rust snapshots via Tauri events. Each webview has one Svelte rune-based controller; revision numbers reject stale responses.
 - Reload must not interrupt a running timer.
 - No accounts, no sync, no multi-device, no projects/clients/tags in v1.
 - Tauri 2 + macOS only for now; the prototype runs in any modern browser.

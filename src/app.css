@@ -1,25 +1,90 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: "Fraunces Variable";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("@fontsource-variable/fraunces/files/fraunces-latin-full-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Inter Variable";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("@fontsource-variable/inter/files/inter-latin-wght-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono Variable";
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url("@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2") format("woff2");
+}
+
 @theme {
-  --color-receipt-bg: #0a0a0a;
-  --color-receipt-fg: #e5e5e5;
-  --color-receipt-muted: #6b6b6b;
-  --color-receipt-accent: #d4d4d4;
-  --color-receipt-border: #1f1f1f;
-  --font-mono: ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
+  --color-ink: #0c0a07;
+  --color-ink-2: #3d3a35;
+  --color-ink-3: #5e5749;
+  --color-paper: #f3eee2;
+  --color-paper-2: #ebe5d3;
+  --color-paper-3: #ddd5c0;
+  --color-rule: #b8ad94;
+  --color-accent: #c8201a;
+  --color-accent-2: #8a1410;
+  --color-positive: #1a5a35;
+  --color-destructive: #9a1810;
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-display: "Fraunces Variable", Georgia, serif;
 }
 
-html,
-body {
-  background: transparent;
-  color: var(--color-receipt-fg);
-  font-family:
-    ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "SF Pro", sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
+html, body { margin: 0; background: transparent; color: var(--color-ink); font-family: var(--font-sans); -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+body { min-width: 280px; }
+.display { font-family: var(--font-display); font-feature-settings: "ss01", "ss02", "tnum", "lnum"; font-variation-settings: "opsz" 144; }
+.mono { font-family: var(--font-mono); }
+.tabular { font-variant-numeric: tabular-nums; }
+h1, h2, h3 { text-wrap: balance; }
+::selection { background: var(--color-accent); color: var(--color-paper); }
+* { scrollbar-color: var(--color-rule) var(--color-paper-2); scrollbar-width: thin; }
+button, input { -webkit-tap-highlight-color: transparent; }
+/* State colors update atomically, including in background native webviews. */
+button { cursor: pointer; transition: transform 80ms ease; }
+button:not(:disabled):active { transform: translateY(0.5px); }
+button:disabled { cursor: not-allowed; }
+input { caret-color: var(--color-accent); }
+:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
+/* The field already has an accent border and focus ring; do not double it. */
+input:focus-visible { outline: none; }
+a { text-underline-offset: 3px; }
 
-/* Make window background transparent so widget can show through. */
-html {
-  background: transparent;
-}
+.perf { height: 5px; background-image: radial-gradient(circle at 2px 50%, var(--color-rule) 0.9px, transparent 1.3px), linear-gradient(90deg, var(--color-rule) 1.4px, transparent 1.4px); background-size: 8px 5px, 8px 5px; background-position: 0 50%, 4px 50%; background-repeat: repeat-x; }
+.crosshair { width: 10px; height: 10px; position: relative; display: inline-block; flex-shrink: 0; }
+.crosshair::before, .crosshair::after { content: ''; position: absolute; background: currentColor; }
+.crosshair::before { top: 50%; left: 0; right: 0; height: 1px; margin-top: -0.5px; }
+.crosshair::after { left: 50%; top: 0; bottom: 0; width: 1px; margin-left: -0.5px; }
+.crops { position: relative; }
+.crops > .crop { position: absolute; pointer-events: none; width: 14px; height: 14px; border-color: var(--color-ink-3); border-style: solid; border-width: 0; }
+.crop.tl { top: 10px; left: 10px; border-top-width: 1px; border-left-width: 1px; }
+.crop.tr { top: 10px; right: 10px; border-top-width: 1px; border-right-width: 1px; }
+.crop.bl { bottom: 10px; left: 10px; border-bottom-width: 1px; border-left-width: 1px; }
+.crop.br { bottom: 10px; right: 10px; border-bottom-width: 1px; border-right-width: 1px; }
+.stamp { transform: rotate(-3deg); transform-origin: center; }
+@keyframes pulse-rec { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .3; transform: scale(.7); } }
+.pulse-rec { animation: pulse-rec 1.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .pulse-rec { animation: none; } button, input { transition: none; } }
+
+/* Identical time gutter and day columns in the header and calendar body. */
+.cal-grid { --cal-gutter: 64px; min-width: 620px; }
+.cal-heading { display: grid; grid-template-columns: var(--cal-gutter) repeat(7, minmax(0, 1fr)); align-items: end; margin-bottom: 10px; }
+.cal-body { position: relative; height: 384px; }
+.cal-axis { position: absolute; inset: 0 auto 0 0; width: var(--cal-gutter); }
+.cal-axis span { position: absolute; right: 14px; font-size: 11px; line-height: 16px; color: var(--color-ink-3); transform: translateY(-50%); }
+.cal-axis span:first-child { transform: none; }
+.cal-axis span:last-child { transform: translateY(-100%); }
+.cal-lines, .cal-days { position: absolute; inset: 0 0 0 var(--cal-gutter); }
+.cal-lines { pointer-events: none; }
+.cal-lines span { position: absolute; left: 0; right: 0; border-top: 1px solid color-mix(in srgb, var(--color-rule) 45%, transparent); }
+.cal-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); overflow: hidden; }
+.cal-days > div { min-width: 0; border-left: 1px solid color-mix(in srgb, var(--color-rule) 35%, transparent); }
+.cal-days > div:last-child { border-right: 1px solid color-mix(in srgb, var(--color-rule) 35%, transparent); }
