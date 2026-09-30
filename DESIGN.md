@@ -29,16 +29,34 @@ typography:
     lineHeight: 1
     letterSpacing: -0.02em
     fontVariation: '"opsz" 144'
-  body:
-    fontFamily: "Inter Variable, system-ui, sans-serif"
-    fontSize: 13px
-    fontWeight: 400
-    lineHeight: 1.5
+  micro:
+    fontFamily: "JetBrains Mono Variable, monospace"
+    fontSize: 9px
   label:
     fontFamily: "JetBrains Mono Variable, monospace"
     fontSize: 10px
     fontWeight: 600
     letterSpacing: 0.22em
+  metadata:
+    fontFamily: "JetBrains Mono Variable, monospace"
+    fontSize: 11px
+  detail:
+    fontFamily: "Inter Variable, system-ui, sans-serif"
+    fontSize: 12px
+  body:
+    fontFamily: "Inter Variable, system-ui, sans-serif"
+    fontSize: 13px
+    fontWeight: 400
+    lineHeight: 1.5
+  dialog-title:
+    fontFamily: "Fraunces Variable, Georgia, serif"
+    fontSize: 24px
+  main-timer:
+    fontFamily: "Fraunces Variable, Georgia, serif"
+    fontSize: 42px
+  statistics:
+    fontFamily: "Fraunces Variable, Georgia, serif"
+    fontSize: 52px
   button:
     fontFamily: "Inter Variable, system-ui, sans-serif"
     fontSize: 14px
@@ -120,9 +138,9 @@ Fraunces carries the wordmark, timer and totals, with optical size 144. The main
 
 ## Layout
 
-The 320px popup has a status/open-log row, full-width note, timer and Start/Stop, then the color strip. Its height follows content, including recoverable errors. The full window starts at 760×720 and keeps the native title bar. Main content uses a 28px inset, reduced to 20px below 560px. At that breakpoint, the timer moves above the note and action.
+The 320px popup has a status/open-log row, full-width note, timer and Start/Stop, help disclosure, then the color strip. Its height follows content, including recoverable errors and expanded help. An empty note shows the Start requirement beside the field. The full window starts at 760×720 and keeps the native title bar. Main content uses a 28px inset, reduced to 20px below 560px. At that breakpoint, the timer moves above the note and action.
 
-The week is Sunday-first and shares a 64px gutter plus seven equal columns between dates and blocks. Its grid has a 620px minimum width and horizontal keyboard scrolling on narrow windows. The 08:00–20:00 axis adapts between 144px and 384px high to keep its last label and legend visible in normal window sizes. Date headings, rules, blocks and the current-time indicator must use the same scale. Tiny windows may scroll vertically rather than remove content.
+The week is Sunday-first and shares a 64px gutter plus seven equal columns between dates and blocks. Its grid has a 620px minimum width and horizontal keyboard scrolling on narrow windows, with a visible cue for remaining days. The 08:00–20:00 axis adapts between 144px and 384px high to keep its last label and legend visible in normal window sizes. Date headings, rules, blocks and the current-time indicator must use the same scale. Tiny windows may scroll vertically rather than remove content.
 
 Off-hours recordings appear above the grid. Do not pretend an early-morning recording started at 08:00. Saved off-hours sessions remain available in the disclosure above the grid.
 
@@ -136,12 +154,13 @@ Fields use the field radius; controls use the button radius; the popup uses the 
 
 ## Components
 
-- **Timer controls:** identical behavior in both surfaces; empty notes disable Start; Stop commits before displaying Saved. Enter activates the form.
+- **Timer controls:** identical behavior in both surfaces; empty notes disable Start and show the note requirement. Return or ⌘↵ submits the note form. Stop commits before displaying Saved; Undo remains available for five seconds.
 - **Note:** editable while recording. Focus uses one accent border and a subtle 2px ring, not a second outer outline. Other keyboard targets retain a visible outline.
 - **Tabs:** uppercase mono labels; selected paper background with a red underline. Left/Right, Home and End navigate.
-- **Log:** time, duration, note and hexadecimal ID; date groups disambiguate earlier days. A recording is a live row, not a saved duplicate.
+- **Log:** time, duration, note, hexadecimal ID and Edit/Delete actions; date groups disambiguate earlier days. Edit exposes local start/end and note with Save/Cancel. Delete requires an explicit confirmation. A recording is a live row, not a saved duplicate.
 - **Week:** explicit time labels, aligned columns, distinct recording blocks and a truthful current-time line only inside the displayed range.
 - **Stats:** today and rolling seven days, with seven actual-height bars. Zero data has a real empty state.
+- **Help:** a compact disclosure lists Return/⌘↵, tab navigation, popup toggle/dismiss, and saved-session recovery on both surfaces.
 - **Motion:** the recording dot pulses over 1.4s; press feedback moves 0.5px over 80ms. State colors change immediately so background native webviews never retain a stale selected tab or Stop color. Reduced motion disables animation. Screen readers announce transitions, not every clock tick.
 
 ## Do's and Don'ts

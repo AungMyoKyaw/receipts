@@ -1,11 +1,11 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, SqliteConnection, SqlitePool};
 use tokio::sync::Mutex;
 
 pub const DB_URL: &str = "sqlite:receipts.db";
 pub const SCHEMA: &str = include_str!("../sql/schema.sql");
 
-#[derive(Debug, Clone, Serialize, FromRow)]
+#[derive(Debug, Clone, Deserialize, Serialize, FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct Session {
     pub id: i64,
@@ -54,7 +54,7 @@ impl AppState {
     }
 
     pub async fn start(&self, note: String, now: i64) -> Result<Snapshot, String> {
-        let note = validate_note(&note, true)?;
+        let note = validate_note(&note, Some("Add a note before starting the timer."))?;
         let _guard = self.gate.lock().await;
         let mut tx = self.pool.begin().await.map_err(db_error)?;
         let changed = sqlx::query("UPDATE timer_state SET started_at = ?, note = ?, revision = revision + 1 WHERE id = 1 AND started_at IS NULL")
@@ -72,7 +72,10 @@ impl AppState {
         note: String,
         expected_start: Option<i64>,
     ) -> Result<Snapshot, String> {
-        let note = validate_note(&note, expected_start.is_some())?;
+        let note = validate_note(
+            &note,
+            expected_start.map(|_| "Add a note while the timer is running."),
+        )?;
         let _guard = self.gate.lock().await;
         let mut tx = self.pool.begin().await.map_err(db_error)?;
         let changed = sqlx::query("UPDATE timer_state SET note = ?, revision = revision + 1 WHERE id = 1 AND started_at IS ?")
@@ -116,6 +119,62 @@ impl AppState {
         Ok(snapshot)
     }
 
+    pub async fn update_session(
+        &self,
+        expected: Session,
+        started_at: i64,
+        ended_at: i64,
+        note: String,
+    ) -> Result<Snapshot, String> {
+        let note = validate_note(&note, Some("Add a note before saving the session."))?;
+        let duration_ms = ended_at
+            .checked_sub(started_at)
+            .filter(|duration| *duration >= 0)
+            .ok_or("End time must not be earlier than start time.")?;
+        let _guard = self.gate.lock().await;
+        let mut tx = self.pool.begin().await.map_err(db_error)?;
+        let changed = sqlx::query("UPDATE sessions SET started_at = ?, ended_at = ?, duration_secs = ?, note = ? WHERE id = ? AND started_at = ? AND ended_at = ? AND note = ?")
+            .bind(started_at).bind(ended_at).bind(duration_ms / 1000).bind(note)
+            .bind(expected.id).bind(expected.started_at).bind(expected.ended_at).bind(&expected.note)
+            .execute(&mut *tx).await.map_err(db_error)?.rows_affected();
+        if changed == 0 {
+            return Err("This session changed in another window. Refresh and try again.".into());
+        }
+        sqlx::query("UPDATE timer_state SET revision = revision + 1 WHERE id = 1")
+            .execute(&mut *tx)
+            .await
+            .map_err(db_error)?;
+        let snapshot = read_snapshot(&mut tx).await.map_err(db_error)?;
+        tx.commit().await.map_err(db_error)?;
+        Ok(snapshot)
+    }
+
+    pub async fn delete_session(&self, expected: Session) -> Result<Snapshot, String> {
+        let _guard = self.gate.lock().await;
+        let mut tx = self.pool.begin().await.map_err(db_error)?;
+        let changed = sqlx::query(
+            "DELETE FROM sessions WHERE id = ? AND started_at = ? AND ended_at = ? AND note = ?",
+        )
+        .bind(expected.id)
+        .bind(expected.started_at)
+        .bind(expected.ended_at)
+        .bind(&expected.note)
+        .execute(&mut *tx)
+        .await
+        .map_err(db_error)?
+        .rows_affected();
+        if changed == 0 {
+            return Err("This session changed in another window. Refresh and try again.".into());
+        }
+        sqlx::query("UPDATE timer_state SET revision = revision + 1 WHERE id = 1")
+            .execute(&mut *tx)
+            .await
+            .map_err(db_error)?;
+        let snapshot = read_snapshot(&mut tx).await.map_err(db_error)?;
+        tx.commit().await.map_err(db_error)?;
+        Ok(snapshot)
+    }
+
     pub async fn started_at(&self) -> Result<Option<i64>, sqlx::Error> {
         sqlx::query_scalar("SELECT started_at FROM timer_state WHERE id = 1")
             .fetch_one(&self.pool)
@@ -140,12 +199,12 @@ async fn read_snapshot(connection: &mut SqliteConnection) -> Result<Snapshot, sq
     })
 }
 
-fn validate_note(note: &str, required: bool) -> Result<String, String> {
+fn validate_note(note: &str, required_message: Option<&str>) -> Result<String, String> {
     if note.encode_utf16().count() > 120 {
         return Err("Keep the note to 120 characters.".into());
     }
-    if required && note.trim().is_empty() {
-        return Err("Add a note before starting the timer.".into());
+    if let Some(message) = required_message.filter(|_| note.trim().is_empty()) {
+        return Err(message.into());
     }
     Ok(note.to_string())
 }
@@ -268,6 +327,48 @@ mod tests {
         );
         reopened.close().await;
         std::fs::remove_file(path).unwrap();
+    }
+
+    #[tokio::test]
+    async fn saved_sessions_can_be_edited_deleted_and_reject_stale_rows() {
+        let state = memory().await;
+        state.start("work".into(), 1_000).await.unwrap();
+        let stopped = state.stop(1_000, 5_000).await.unwrap();
+        let original = stopped.sessions[0].clone();
+        let edited = state
+            .update_session(original.clone(), 2_000, 7_000, "revised".into())
+            .await
+            .unwrap();
+        assert_eq!(edited.sessions[0].started_at, 2_000);
+        assert_eq!(edited.sessions[0].ended_at, 7_000);
+        assert_eq!(edited.sessions[0].duration_ms, 5_000);
+        assert_eq!(edited.sessions[0].note, "revised");
+        assert!(state
+            .delete_session(original)
+            .await
+            .unwrap_err()
+            .contains("changed in another window"));
+        let current = edited.sessions[0].clone();
+        let deleted = state.delete_session(current).await.unwrap();
+        assert!(deleted.sessions.is_empty());
+        assert_eq!(deleted.revision, edited.revision + 1);
+    }
+
+    #[tokio::test]
+    async fn invalid_session_edits_leave_saved_data_unchanged() {
+        let state = memory().await;
+        state.start("work".into(), 1_000).await.unwrap();
+        let stopped = state.stop(1_000, 5_000).await.unwrap();
+        let original = stopped.sessions[0].clone();
+        assert!(state
+            .update_session(original.clone(), 7_000, 6_000, "work".into())
+            .await
+            .is_err());
+        assert!(state
+            .update_session(original.clone(), 1_000, 5_000, " ".into())
+            .await
+            .is_err());
+        assert_eq!(state.snapshot().await.unwrap().sessions[0].note, "work");
     }
 
     #[tokio::test]

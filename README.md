@@ -11,7 +11,7 @@ bun install --frozen-lockfile
 bun run tauri dev
 ```
 
-Click the receipt icon in the menu bar to open the 320px timer. Enter a note, then press Enter or Start. Stop saves the session. **Open log** shows the main window. Both windows can start, edit and stop the same timer.
+Click the receipt icon in the menu bar to open the 320px timer. Enter a note, then press Return or Start. Stop saves the session; Undo remains available for five seconds. **Open log** shows the main window. Both windows can start, update the running note and stop the same timer. In Log, edit a saved session's note or local start/end times, or delete it after confirmation.
 
 - Escape or clicking outside dismisses the popup.
 - Closing the log hides it; recording continues. Quit from the tray menu to exit.

@@ -5,6 +5,7 @@
   import { hideWidget, native, showMain } from "$lib/timer";
   import TimerControls from "./TimerControls.svelte";
   import Notice from "./Notice.svelte";
+  import Help from "./Help.svelte";
 
   let panel: HTMLElement;
   const running = $derived(receipts.snapshot.running);
@@ -46,6 +47,7 @@
   </header>
   <TimerControls compact />
   <Notice />
+  <Help compact />
   <div class="mt-auto flex h-[3px] w-full shrink-0" aria-hidden="true">
     <span class="flex-1 bg-accent"></span><span class="flex-1 bg-positive"></span><span class="flex-1 bg-ink"></span><span class="flex-1 bg-rule"></span>
   </div>

@@ -29,6 +29,29 @@ describe("preview state transitions", () => {
     expect(() => reducePreview(emptySnapshot(), { kind: "start", note: "😀".repeat(61) }, 1000)).toThrow();
     expect(reducePreview(emptySnapshot(), { kind: "note", note: "", startedAt: null }, 1000).note).toBe("");
   });
+  test("saved sessions can be corrected and deleted without accepting stale rows", () => {
+    const stopped = reducePreview(
+      reducePreview(emptySnapshot(), { kind: "start", note: "work" }, 1000),
+      { kind: "stop", startedAt: 1000 }, 5000,
+    );
+    const original = stopped.sessions[0];
+    const edited = reducePreview(stopped, {
+      kind: "updateSession", expected: original, startedAt: 2000, endedAt: 7000, note: "revised work",
+    }, 7000);
+    expect(edited.sessions[0]).toMatchObject({ id: original.id, startedAt: 2000, endedAt: 7000, durationMs: 5000, note: "revised work" });
+    expect(() => reducePreview(edited, { kind: "deleteSession", expected: original }, 8000)).toThrow("changed in another window");
+    const deleted = reducePreview(edited, { kind: "deleteSession", expected: edited.sessions[0] }, 8000);
+    expect(deleted.sessions).toEqual([]);
+    const restarted = reducePreview(deleted, { kind: "start", note: "next" }, 9000);
+    const nextSession = reducePreview(restarted, { kind: "stop", startedAt: 9000 }, 10_000, original.id + 1);
+    expect(nextSession.sessions[0].id).toBe(original.id + 1);
+    expect(() => reducePreview(stopped, {
+      kind: "updateSession", expected: original, startedAt: 7000, endedAt: 6000, note: "work",
+    }, 8000)).toThrow("End time must not be earlier than start time");
+    expect(() => reducePreview(stopped, {
+      kind: "updateSession", expected: original, startedAt: 1000, endedAt: 5000, note: "  ",
+    }, 8000)).toThrow("Add a note before saving");
+  });
   test("clock rollback clamps duration without mutating previous state", () => {
     const started = reducePreview(emptySnapshot(), { kind: "start", note: "work" }, 1000);
     expect(reducePreview(started, { kind: "stop", startedAt: 1000 }, 500).sessions[0].durationMs).toBe(0);

@@ -21,6 +21,27 @@ export function formatTime(ts: number): string {
   const date = new Date(ts);
   return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
+export function formatLocalDateTimeInput(ts: number): string {
+  const date = new Date(ts);
+  const minute = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  if (date.getSeconds() === 0 && date.getMilliseconds() === 0) return minute;
+  const second = `${minute}:${pad(date.getSeconds())}`;
+  return date.getMilliseconds() === 0 ? second : `${second}.${String(date.getMilliseconds()).padStart(3, "0")}`;
+}
+export function parseLocalDateTimeInput(value: string): number {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?$/.exec(value);
+  if (!match) throw new Error("Choose a valid local date and time.");
+  const [, year, month, day, hour, minute, seconds = "0", fraction = "0"] = match;
+  const parts = [Number(year), Number(month), Number(day), Number(hour), Number(minute), Number(seconds)];
+  const milliseconds = Number(fraction.padEnd(3, "0"));
+  const date = new Date(parts[0], parts[1] - 1, parts[2], parts[3], parts[4], parts[5], milliseconds);
+  if (!Number.isFinite(date.getTime()) || date.getFullYear() !== parts[0] || date.getMonth() !== parts[1] - 1 ||
+    date.getDate() !== parts[2] || date.getHours() !== parts[3] || date.getMinutes() !== parts[4] ||
+    date.getSeconds() !== parts[5] || date.getMilliseconds() !== milliseconds) {
+    throw new Error("Choose a valid local date and time.");
+  }
+  return date.getTime();
+}
 export function dateStamp(ts: number): string {
   const date = new Date(ts);
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} · ${dayNames[date.getDay()]}`;

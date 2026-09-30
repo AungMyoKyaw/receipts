@@ -1,5 +1,5 @@
 import { getSnapshot, mutate, subscribe } from "./timer";
-import { emptySnapshot, type Action, type Snapshot } from "./types";
+import { emptySnapshot, type Action, type Session, type Snapshot } from "./types";
 
 export const receipts = $state({
   snapshot: emptySnapshot(),
@@ -10,15 +10,32 @@ export const receipts = $state({
   error: "",
   announcement: "",
   savedUntil: 0,
+  undoSession: null as Session | null,
+  undoUntil: 0,
 });
 
 let pendingNotes = 0;
 let failedNote: Extract<Action, { kind: "note" }> | null = null;
+let failedSessionAction: { action: Extract<Action, { kind: "updateSession" | "deleteSession" }>; announcement: string } | null = null;
 let queue: Promise<void> = Promise.resolve();
 
 function apply(snapshot: Snapshot) {
   if (snapshot.revision < receipts.snapshot.revision) return;
+  const previous = receipts.snapshot;
+  if (receipts.ready && snapshot.revision > previous.revision) {
+    const added = snapshot.sessions.find(session => !previous.sessions.some(row => row.id === session.id));
+    if (added) {
+      receipts.undoSession = added;
+      receipts.undoUntil = Date.now() + 5000;
+    }
+  }
   receipts.snapshot = snapshot;
+  if (receipts.undoSession && !snapshot.sessions.some(row =>
+    row.id === receipts.undoSession?.id && row.startedAt === receipts.undoSession.startedAt &&
+    row.endedAt === receipts.undoSession.endedAt && row.note === receipts.undoSession.note)) {
+    receipts.undoSession = null;
+    receipts.undoUntil = 0;
+  }
   if (pendingNotes === 0 && failedNote === null) {
     receipts.note = snapshot.note;
     pendingNotes = 0;
@@ -32,17 +49,37 @@ export async function refresh() {
   try { apply(await getSnapshot()); } catch (error) { reportError(error); }
 }
 export async function retry() {
+  if (receipts.busy) return;
+  receipts.busy = true;
   receipts.error = "";
-  await queue;
-  if (failedNote) {
-    const action = failedNote;
-    try {
-      const snapshot = await mutate(action);
-      failedNote = null;
-      apply(snapshot);
-    } catch (error) { reportError(error); }
-  } else {
-    await refresh();
+  try {
+    await queue;
+    if (failedNote) {
+      const action = failedNote;
+      try {
+        const snapshot = await mutate(action);
+        failedNote = null;
+        apply(snapshot);
+        receipts.announcement = "Work note saved.";
+      } catch (error) { reportError(error); }
+    } else if (failedSessionAction) {
+      const pending = failedSessionAction;
+      try {
+        const snapshot = await mutate(pending.action);
+        failedSessionAction = null;
+        apply(snapshot);
+        receipts.announcement = pending.announcement;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (message.includes("changed in another window")) failedSessionAction = null;
+        reportError(error);
+        await refresh();
+      }
+    } else {
+      await refresh();
+    }
+  } finally {
+    receipts.busy = false;
   }
 }
 
@@ -88,6 +125,46 @@ export function setNote(note: string) {
       // Keep the local draft visible so a failed save is not mistaken for success.
     }
   });
+}
+
+async function commitSessionAction(action: Action, announcement: string): Promise<boolean> {
+  if (receipts.busy || !receipts.ready) return false;
+  receipts.busy = true;
+  receipts.error = "";
+  failedSessionAction = null;
+  try {
+    await queue;
+    if (receipts.error) return false;
+    const snapshot = await mutate(action);
+    failedSessionAction = null;
+    apply(snapshot);
+    receipts.announcement = announcement;
+    return true;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if ((action.kind === "updateSession" || action.kind === "deleteSession") && !message.includes("changed in another window")) {
+      failedSessionAction = { action, announcement };
+    }
+    reportError(error);
+    await refresh();
+    return false;
+  } finally {
+    receipts.busy = false;
+  }
+}
+
+export async function updateSavedSession(expected: Session, startedAt: number, endedAt: number, note: string) {
+  return commitSessionAction({ kind: "updateSession", expected, startedAt, endedAt, note }, "Session updated.");
+}
+
+export async function deleteSavedSession(expected: Session, announcement = "Session deleted.") {
+  return commitSessionAction({ kind: "deleteSession", expected }, announcement);
+}
+
+export async function undoLastStop() {
+  const session = receipts.undoSession;
+  if (!session || Date.now() > receipts.undoUntil) return false;
+  return deleteSavedSession(session, "Last stopped session undone.");
 }
 
 export async function toggleTimer() {

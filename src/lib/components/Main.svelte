@@ -6,6 +6,7 @@
   import SessionLog from "./SessionLog.svelte";
   import WeekCalendar from "./WeekCalendar.svelte";
   import Statistics from "./Statistics.svelte";
+  import Help from "./Help.svelte";
 
   const tabs = ['log', 'week', 'stats'] as const;
   type Tab = typeof tabs[number];
@@ -34,7 +35,7 @@
       <h1 class="display text-[30px] font-normal leading-none tracking-[-0.03em] text-ink">receipts<span class="text-accent">.</span></h1>
       <time datetime={new Date(receipts.now).toISOString()} class="stamp mono inline-block whitespace-nowrap border border-ink-3 bg-paper-2 px-2 py-1 text-[10px] uppercase tracking-[0.22em] text-ink-2">{dateStamp(receipts.now)}</time>
     </div>
-    <div class="mono flex flex-wrap items-center gap-3 text-[11px] uppercase tracking-[0.15em] text-ink-3" aria-label="Session totals">
+    <div class="mono flex flex-wrap items-center gap-3 text-[10px] uppercase tracking-[0.15em] text-ink-3" aria-label="Session totals">
       <span>today <strong class="ml-1 font-semibold text-ink tabular">{formatHM(stats.today)}</strong></span>
       <span aria-hidden="true">·</span>
       <span>week <strong class="ml-1 font-semibold text-ink tabular">{formatHM(stats.week)}</strong></span>
@@ -49,12 +50,12 @@
   <div class="flex gap-1 px-7 pt-5 max-[560px]:px-5" role="tablist" aria-label="Sessions">
     {#each tabs as item}
       <button id={`tab-${item}`} role="tab" aria-selected={tab === item} aria-controls={`panel-${item}`} tabindex={tab === item ? 0 : -1} onkeydown={navigate} onclick={() => tab = item}
-        class="mono border-b-2 px-3.5 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] {tab === item ? 'border-accent bg-paper text-ink' : 'border-transparent text-ink-3 hover:text-ink-2'}">{item}</button>
+        class="mono border-b-2 px-3.5 py-2 text-[10px] font-semibold uppercase tracking-[0.18em] {tab === item ? 'border-accent bg-paper text-ink' : 'border-transparent text-ink-3 hover:text-ink-2'}">{item}</button>
     {/each}
   </div>
   <div class="px-7 pt-2 pb-7 max-[560px]:px-5">
     {#if !receipts.ready}
-      <p class="py-16 text-center mono text-[12px] text-ink-3" role="status">{receipts.error ? 'Local data unavailable.' : 'Opening your log…'}</p>
+      <p class="py-16 text-center mono text-[13px] text-ink-3" role="status">{receipts.error ? 'Local data unavailable.' : 'Opening your log…'}</p>
     {/if}
     {#each tabs as item}
       <div id={`panel-${item}`} role="tabpanel" aria-labelledby={`tab-${item}`} hidden={tab !== item} tabindex="0">
@@ -66,4 +67,5 @@
       </div>
     {/each}
   </div>
+  <Help />
 </main>

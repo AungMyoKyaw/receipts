@@ -11,7 +11,11 @@ export async function mutate(action: Action): Promise<Snapshot> {
   if (!native()) return mutatePreview(action);
   if (action.kind === "start") return invoke("start_timer", { note: action.note });
   if (action.kind === "stop") return invoke("stop_timer", { startedAt: action.startedAt });
-  return invoke("set_note", { note: action.note, startedAt: action.startedAt });
+  if (action.kind === "note") return invoke("set_note", { note: action.note, startedAt: action.startedAt });
+  if (action.kind === "updateSession") return invoke("update_session", {
+    expected: action.expected, startedAt: action.startedAt, endedAt: action.endedAt, note: action.note,
+  });
+  return invoke("delete_session", { expected: action.expected });
 }
 export async function subscribe(changed: (snapshot: Snapshot) => void, failed: (error: unknown) => void): Promise<() => void> {
   if (native()) return listen<Snapshot>("receipts:changed", event => changed(event.payload));

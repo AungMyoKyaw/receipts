@@ -58,6 +58,33 @@ async fn set_note(
 }
 
 #[tauri::command]
+async fn update_session(
+    expected: state::Session,
+    started_at: i64,
+    ended_at: i64,
+    note: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Snapshot, String> {
+    let snapshot = state
+        .update_session(expected, started_at, ended_at, note)
+        .await?;
+    publish(&app, &snapshot);
+    Ok(snapshot)
+}
+
+#[tauri::command]
+async fn delete_session(
+    expected: state::Session,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Snapshot, String> {
+    let snapshot = state.delete_session(expected).await?;
+    publish(&app, &snapshot);
+    Ok(snapshot)
+}
+
+#[tauri::command]
 fn hide_widget(app: AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window(WIDGET) {
         window.hide().map_err(|e| e.to_string())?;
@@ -289,6 +316,8 @@ pub fn run() {
             start_timer,
             stop_timer,
             set_note,
+            update_session,
+            delete_session,
             hide_widget,
             show_main
         ])

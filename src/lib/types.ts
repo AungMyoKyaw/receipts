@@ -21,4 +21,6 @@ export const emptySnapshot = (): Snapshot => ({
 export type Action =
   | { kind: "start"; note: string }
   | { kind: "stop"; startedAt: number }
-  | { kind: "note"; note: string; startedAt: number | null };
+  | { kind: "note"; note: string; startedAt: number | null }
+  | { kind: "updateSession"; expected: Session; startedAt: number; endedAt: number; note: string }
+  | { kind: "deleteSession"; expected: Session };

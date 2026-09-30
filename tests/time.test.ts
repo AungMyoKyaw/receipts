@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { addDays, calendarDays, countInRange, dateStamp, dayStart, entries, formatDuration, formatHM, formatHMS, HOUR, statistics, totalInRange, weekStart, type Entry } from "../src/lib/time";
+import { addDays, calendarDays, countInRange, dateStamp, dayStart, entries, formatDuration, formatHM, formatHMS, formatLocalDateTimeInput, HOUR, parseLocalDateTimeInput, statistics, totalInRange, weekStart, type Entry } from "../src/lib/time";
 import { emptySnapshot } from "../src/lib/types";
 
 const local = (year: number, month: number, day: number, hour = 0, minute = 0) => new Date(year, month - 1, day, hour, minute).getTime();
@@ -16,6 +16,15 @@ describe("formatting", () => {
   test("uses local date rather than UTC date", () => {
     expect(dateStamp(local(2026, 9, 30))).toBe("2026-09-30 · WED");
     expect(dayStart(local(2026, 9, 30, 23))).toBe(local(2026, 9, 30));
+  });
+  test("round-trips local editor timestamps including milliseconds", () => {
+    const timestamp = new Date(2026, 8, 30, 12, 34, 56, 789).getTime();
+    expect(parseLocalDateTimeInput(formatLocalDateTimeInput(timestamp))).toBe(timestamp);
+    expect(parseLocalDateTimeInput("2026-09-30T14:00")).toBe(local(2026, 9, 30, 14, 0));
+    expect(() => parseLocalDateTimeInput("not-a-date")).toThrow("Choose a valid local date and time");
+    if (process.env.TZ === "America/New_York") {
+      expect(() => parseLocalDateTimeInput("2026-03-08T02:30")).toThrow("Choose a valid local date and time");
+    }
   });
 });
 

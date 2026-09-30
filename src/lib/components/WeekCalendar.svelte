@@ -61,6 +61,7 @@
 </div>
 <!-- svelte-ignore a11y_no_noninteractive_tabindex (Keyboard users must be able to scroll the calendar.) -->
 <div class="overflow-x-auto pb-2" tabindex="0" role="region" aria-label="Weekly calendar, scroll horizontally on small screens">
+  <p class="mb-2 hidden mono text-[10px] text-ink-3 max-[680px]:block">Scroll horizontally for the remaining days.</p>
   <div class="cal-grid">
     <div class="cal-heading">
       <div class="pb-2.5 mono text-[11px] text-ink-3">Local</div>

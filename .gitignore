@@ -4,6 +4,7 @@ node_modules
 /.svelte-kit
 /package
 /.playwright-cli
+/.impeccable/critique/
 .env
 .env.*
 !.env.example
